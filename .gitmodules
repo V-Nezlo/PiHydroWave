@@ -1,0 +1,6 @@
+[submodule "lib/UtilitaryRS"]
+	path = lib/UtilitaryRS
+	url = git@github.com:V-Nezlo/UtilitaryRS
+[submodule "lib/EspNowProto"]
+	path = lib/EspNowProto
+	url = git@github.com:V-Nezlo/EspNowUSBProto

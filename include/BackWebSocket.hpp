@@ -1,0 +1,113 @@
+#ifndef BACKWEBSOCKET_HPP
+#define BACKWEBSOCKET_HPP
+
+#include "nlohmann/json.hpp"
+#include <drogon/WebSocketConnection.h>
+#include <drogon/WebSocketController.h>
+#include <core/Blackboard.hpp>
+#include <core/EventBus.hpp>
+#include <mutex>
+#include <string>
+#include <unordered_set>
+
+class BackWebSocket : public drogon::WebSocketController<BackWebSocket>, public AbstractEntryObserver, public EventBusObserver {
+public:
+	BackWebSocket() = default;
+
+	// AbstractEntryObserver interface
+	void onEntryUpdated(std::string_view entry, const std::any &value) override
+	{
+		nlohmann::json msg{
+			{"type", "telemetry"},
+			{"key", entry},
+			{"value", toJson(value)}
+		};
+		broadcastTelemetry(msg.dump());
+	}
+
+	void handleNewConnection(const drogon::HttpRequestPtr &req,
+							 const drogon::WebSocketConnectionPtr &conn) override
+	{
+		auto path = req->path();
+		std::lock_guard lock(mutex);
+
+		if (path == "/ws/telemetry") telemetryClients.insert(conn);
+		else if (path == "/ws/logs") logClients.insert(conn);
+	}
+
+	void handleConnectionClosed(const drogon::WebSocketConnectionPtr &conn) override
+	{
+		std::lock_guard lock(mutex);
+		telemetryClients.erase(conn);
+		logClients.erase(conn);
+	}
+
+	void handleNewMessage(const drogon::WebSocketConnectionPtr &conn,
+					   std::string &&message,
+					   const drogon::WebSocketMessageType &type) override
+	{
+		(void)message;
+		(void)conn;
+		(void)type;
+	}
+
+	static void registerInterfaces(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aBus)
+	{
+		bb = aBb;
+		bus = aBus;
+	}
+
+	// EventBusObserver interface
+	void handleEvent(EventType aEv, std::any &aValue) override
+	{
+		if (aEv == EventType::Log) {
+			std::string msg = std::any_cast<std::string>(aValue);
+			broadcastLogs(msg);
+		}
+	}
+
+	WS_PATH_LIST_BEGIN
+	WS_PATH_ADD("/ws/telemetry", drogon::Get);
+	WS_PATH_ADD("/ws/logs", drogon::Get);
+	WS_PATH_LIST_END
+
+private:
+	static std::shared_ptr<Blackboard> bb;
+	static std::shared_ptr<EventBus> bus;
+
+	std::unordered_set<drogon::WebSocketConnectionPtr> telemetryClients;
+	std::unordered_set<drogon::WebSocketConnectionPtr> logClients;
+
+	std::mutex mutex;
+
+	void broadcastTelemetry(const std::string &msg)
+	{
+		std::lock_guard lock(mutex);
+
+		for (auto &c : telemetryClients)
+			if (c->connected()) c->send(msg);
+	}
+
+	void broadcastLogs(const std::string &msg)
+	{
+		std::lock_guard lock(mutex);
+
+		for (auto &c : logClients)
+			if (c->connected()) c->send(msg);
+	}
+
+	static nlohmann::json toJson(const std::any& v)
+	{
+		if (v.type() == typeid(int)) return std::any_cast<int>(v);
+		if (v.type() == typeid(double)) return std::any_cast<double>(v);
+		if (v.type() == typeid(bool)) return std::any_cast<bool>(v);
+		if (v.type() == typeid(std::string)) return std::any_cast<std::string>(v);
+		if (v.type() == typeid(uint64_t)) return std::any_cast<uint64_t>(v);
+		return "unsupported";
+	}
+};
+
+std::shared_ptr<Blackboard> BackWebSocket::bb;
+std::shared_ptr<EventBus> BackWebSocket::bus;
+
+#endif // BACKWEBSOCKET_HPP
