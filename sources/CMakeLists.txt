@@ -1,4 +1,4 @@
-file(GLOB_RECURSE SOURCE_LIST "*.cpp")
+file(GLOB_RECURSE SOURCE_LIST CONFIGURE_DEPENDS "*.cpp")
 list(FILTER SOURCE_LIST EXCLUDE REGEX "main\\.cpp$")
 
 add_library(Sources OBJECT ${SOURCE_LIST})

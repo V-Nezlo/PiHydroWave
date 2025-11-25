@@ -59,12 +59,14 @@ class PumpController : public AbstractEntryObserver {
 	bool fillingCheckEn;
 	mutable std::mutex mutex;
 	std::thread thread;
+	bool startedFlag;
 
 public:
 	PumpController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aEvBus);
 	bool ready() const;
 	void process();
 	void start();
+	bool isStarted() const;
 
 	// AbstractEntryObserver interface
 	void onEntryUpdated(std::string_view entry, const std::any &value) override;

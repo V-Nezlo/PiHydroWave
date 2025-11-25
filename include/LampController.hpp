@@ -22,6 +22,7 @@ public:
 	bool ready() const;
 	void process();
 	void start();
+	bool isStarted() const;
 
 private:
 	std::shared_ptr<Blackboard> bb;
@@ -37,6 +38,7 @@ private:
 	std::chrono::milliseconds lastCheckTime;
 	std::mutex mutex;
 	std::thread thread;
+	bool started;
 
 	void sendCommand(bool aNewLampState);
 	bool isTimeForLampActive();

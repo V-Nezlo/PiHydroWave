@@ -63,9 +63,11 @@ public:
 
 	void start()
 	{
-		receive = std::thread(ThisClass::receiveThread(), this);
+		proxy.start();
+
+		receive = std::thread(&ThisClass::receiveThread, this);
 		receive.detach();
-		transmit = std::thread(ThisClass::processThread(), this);
+		transmit = std::thread(&ThisClass::processThread, this);
 		transmit.detach();
 	}
 

@@ -46,7 +46,9 @@ PumpController::PumpController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<
 	waterFillingTimer{0},
 	lastChecksTime{0},
 	lastValidatorTime{0},
-	fillingCheckEn{false}
+	fillingCheckEn{false},
+
+	startedFlag{false}
 {
 
 }
@@ -80,10 +82,17 @@ bool PumpController::ready() const
 
 void PumpController::start()
 {
-	bus->sendEvent(EventType::Log, std::string("Pump Controller started!"));
+	startedFlag = true;
 	mode.subscribe(this);
 	thread = std::thread(&PumpController::process, this);
 	thread.detach();
+
+	bus->sendEvent(EventType::Log, std::string("Pump Controller started!"));
+}
+
+bool PumpController::isStarted() const
+{
+	return startedFlag;
 }
 
 void PumpController::onEntryUpdated(std::string_view entry, const std::any &value)
@@ -96,7 +105,7 @@ void PumpController::onEntryUpdated(std::string_view entry, const std::any &valu
 
 void PumpController::process()
 {
-	while (true) {
+	while (startedFlag) {
 		auto now = std::chrono::steady_clock::now();
 		std::chrono::milliseconds time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 

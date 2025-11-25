@@ -1,115 +1,77 @@
 
+#include "ArgParser.hpp"
+#include "BackRestController.hpp"
+#include "BackWebSocket.hpp"
+#include "DrogonApp.hpp"
 #include "LampController.hpp"
 #include "PumpController.hpp"
 #include "RadioHandler.hpp"
 #include "SerialEspProxy.hpp"
-#include "SettingsManager.hpp"
-
-#include "BackRestController.hpp"
-#include "BackWebSocket.hpp"
-
 #include "core/Blackboard.hpp"
 #include "core/EventBus.hpp"
+#include "core/Logger.hpp"
 #include "core/TimeWrapper.hpp"
-#include "core/Types.hpp"
-#include "storage/LoggingEntry.hpp"
+#include "packages/ConfigPackage.hpp"
+#include "packages/DatabasePackage.hpp"
 #include "storage/Database.hpp"
 
 #include <UtilitaryRS/Crc64.hpp>
 #include <UtilitaryRS/Crc8.hpp>
-
 #include <UtilitaryRS/DeviceHub.hpp>
 #include <UtilitaryRS/RsTypes.hpp>
 
-#include <chrono>
 #include <drogon/HttpAppFramework.h>
 #include <drogon/orm/DbClient.h>
-#include <iostream>
+
+#include <chrono>
 #include <csignal>
+#include <iostream>
 #include <memory>
 #include <thread>
 
 using Hub = RS::DeviceHub<10, SerialEspProxy, TimeWrapper, Crc8, Crc64, 256>;
 
-int main()
+int main(int argc, char *argv[])
 {
-	auto blackBoard = std::make_shared<Blackboard>();
-	SettingsManager config(blackBoard, "config.json");
+	auto args = parseArgs(argc, argv);
+	Log::Logger::setLevel(args.logLevel);
+
+	auto bb = std::make_shared<Blackboard>();
 	auto bus = std::make_shared<EventBus>();
 
-	config.registerSetting("config.lamp.enabled", SettingType::BOOL, true, "Enable lamp");
-	config.registerSetting("config.lamp.onTime", SettingType::UNSIGNED, 0, "Lamp on time in minutes");
-	config.registerSetting("config.lamp.offTime", SettingType::UNSIGNED, 0, "Lamp off time in minutes");
+	if (args.dbPath) {
+		auto db = std::make_shared<Database>(args.dbPath.value());
+		DatabasePackage dbPackage(bb, db);
+	}
 
-	config.registerSetting("config.pump.enabled", SettingType::BOOL, true, "Enable pump");
-	config.registerSetting("config.pump.mode", SettingType::UNSIGNED, 0, "Pump mode");
-	config.registerSetting("config.pump.onTime", SettingType::UNSIGNED, 0, "Pump on time in seconds");
-	config.registerSetting("config.pump.offTime", SettingType::UNSIGNED, 0, "Pump off time in seconds");
-	config.registerSetting("config.pump.swingTime", SettingType::UNSIGNED, 0, "Pump swing time in seconds");
-	config.registerSetting("config.pump.validTime", SettingType::UNSIGNED, 0, "Upper validation time in seconds");
-	config.registerSetting("config.pump.maxFloodTime", SettingType::UNSIGNED, 0, "Max time for tank flooding in secs");
-	config.registerSetting("config.pump.minWaterLevel", SettingType::UNSIGNED, 0, "Minimal water level in percent for pump operation");
+	DrogonApp drogonApp;
+	drogonApp.start();
 
-	config.registerSetting("slaves.mac.1", SettingType::U64, 0xaabbccddeeUL, "MAC SLOT 1");
-	config.registerSetting("slaves.mac.2", SettingType::U64, 0xaabbccddeeUL, "MAC SLOT 2");
-
+	ConfigPackage config(args.configPath, bb);
 	if (!config.load()) {
-		std::cerr << "Failed to initialize config" << std::endl;
-		return 1;
+		std::cout << "Config not found, creating..." << std::endl;
 	}
 
-	blackBoard->set("config.pump.enabled", false);
+	RS::DeviceVersion ver;
+	RadioHandler<Hub> radioHandler{args.interfacePath, ver, bb, bus};
+	radioHandler.start();
 
-	auto pumpEnabled = blackBoard->get<bool>("config.pump.enabled1");
-	if (pumpEnabled) {
-		std::cout << "config.pump.enabled: " << *pumpEnabled << std::endl;
-	}
+	PumpController pumpControl(bb, bus);
+	LampController lampControl(bb, bus);
 
-//	try {
-//		std::string key("water");
-//		double value = 123.22;
-
-//		Database::init();
-//		Database::getDb()->execSqlSync(
-//			"INSERT INTO telemetry (key, value, timestamp) VALUES (?, ?, datetime('now'))",
-//			key,
-//			value
-//			);
-//		std::cout << "INSERT done\n";
-//	} catch (const drogon::orm::DrogonDbException &e) {
-//		std::cerr << "DB EXCEPTION: " << e.base().what() << "\n";
-//	}
-
-	Database db("hydroponic.db");
-	std::any value = true;
-
-	db.insertAny("pump.state", value);
-	return 0;
-
-	std::cout << "valera" << std::endl;
-
-//	RS::DeviceVersion ver;
-//	RadioHandler<Hub> radioHandler{"/dev/ttyUSB0", ver, blackBoard, bus};
-//	PumpController pumpControl(blackBoard, bus);
-//	pumpControl.ready();
-
-//	LampController lampControl(blackBoard, bus);
-//	lampControl.ready();
-
-	BackRestController::registerInterfaces(blackBoard, bus);
-	BackWebSocket::registerInterfaces(blackBoard, bus);
+	BackRestController::registerInterfaces(bb, bus);
+	BackWebSocket::registerInterfaces(bb, bus);
 
 	BackWebSocket sock;
 
-//	// Запуск в отдельном потоке
-//	drogon::app()
-//			.addListener("0.0.0.0", 8848)
-//			.setThreadNum(1)
-//			.run();
+	while (true) {
+		if (!pumpControl.isStarted() && pumpControl.ready()) {
+			pumpControl.start();
+		}
+		if (!lampControl.isStarted() && lampControl.ready()) {
+			lampControl.start();
+		}
 
-
-	while(true) {
-		int a = 10;
-		std::this_thread::sleep_for(std::chrono::milliseconds{100});
+		std::this_thread::sleep_for(std::chrono::seconds{1});
 	}
 }

@@ -112,8 +112,6 @@ public:
 
 	bool has(std::string_view key) const
 	{
-        std::cout << "Attempting to lock mutex at: " << &mutex << std::endl;
-
 		std::lock_guard lock(mutex);
 		std::string keyStr(key);
 		return data.find(keyStr) != data.end();
@@ -123,7 +121,6 @@ public:
 	{
 		bool existed = false;
 		std::any oldValue;
-
 		{
 			std::lock_guard lock(mutex);
 			std::string keyStr(key);

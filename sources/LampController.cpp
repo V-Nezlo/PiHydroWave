@@ -26,7 +26,9 @@ LampController::LampController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<
 	monitor{aBb},
 
 	lastCheckTime{0},
-	mutex{}
+	mutex{},
+
+	started{false}
 {
 }
 
@@ -49,13 +51,19 @@ bool LampController::ready() const
 
 void LampController::start()
 {
+	started = true;
 	thread = std::thread(&LampController::process, this);
 	thread.detach();
 }
 
+bool LampController::isStarted() const
+{
+	return started;
+}
+
 void LampController::process()
 {
-	while(true) {
+	while(started) {
 		const bool desiredLampState = isTimeForLampActive();
 		const bool currentState = state.read();
 

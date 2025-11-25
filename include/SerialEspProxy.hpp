@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Blackboard.hpp"
+#include "core/BlackboardEntry.hpp"
 #include "core/InterfaceList.hpp"
 
 //#include <EspNowUSBProto/Parser.hpp>
@@ -11,16 +12,29 @@
 #include <UtilitaryRS/RsTypes.hpp>
 
 #include <array>
+#include <chrono>
 #include <memory>
 #include <queue>
+#include <thread>
 
 class SerialEspProxy : public AbstractSerial {
 	using Parser = RS::RsParser<64, Crc8>;
+
+	// clang-format off
+	enum class BridgeStatus {
+		Lost    = 0,
+		Ready   = 1,
+		Working = 2
+	};
+	// clang-format on
 
 	AbstractSerial *driver;
 	std::shared_ptr<Blackboard> bb;
 	EspNowBinaryParser espParser;
 	std::queue<std::vector<uint8_t>> inbox;
+
+	std::chrono::time_point<std::chrono::steady_clock> lastHeartbeatTime;
+	std::chrono::time_point<std::chrono::steady_clock> lastMessageTimepoint;
 
 	struct MacSlot {
 		uint8_t mac[6];
@@ -28,9 +42,27 @@ class SerialEspProxy : public AbstractSerial {
 		uint8_t uid;
 	};
 
+	std::thread thread;
+	BlackboardEntry<BridgeStatus> bridgeStatus;
+
 public:
-	SerialEspProxy(AbstractSerial *aDriver, std::shared_ptr<Blackboard> aBb) : driver{aDriver}, bb{aBb}, espParser{}
+	SerialEspProxy(AbstractSerial *aDriver, std::shared_ptr<Blackboard> aBb) :
+		driver{aDriver},
+		bb{aBb},
+		espParser{},
+		inbox{},
+		lastHeartbeatTime{std::chrono::milliseconds{0}},
+		lastMessageTimepoint{std::chrono::milliseconds{0}},
+		thread{},
+		bridgeStatus{"bridge.status", bb}
 	{
+		bridgeStatus.set(BridgeStatus::Lost);
+	}
+
+	void start()
+	{
+		thread = std::thread(&SerialEspProxy::threadFunction, this);
+		thread.detach();
 	}
 
 	/// \brief Враппер для EspNow, оборачивает сообщение в контейнер с MAC
@@ -114,6 +146,15 @@ public:
 				std::array<uint8_t, 6> newMac;
 				espParser.getMac(newMac);
 
+				// 0xFF MAC это пинг от бриджа, нет смысла делать что-то с пакетом дальше
+				if (newMac[0] == 0xFF && newMac[1] == 0xFF && newMac[2] == 0xFF && newMac[3] == 0xFF
+					&& newMac[4] == 0xFF && newMac[5] == 0xFF) {
+					std::cout << "Bridge heartbeat received!" << std::endl;
+					lastHeartbeatTime = std::chrono::steady_clock::now();
+					espParser.reset();
+					return;
+				}
+
 				const auto keys = bb->getKeysByPrefix("slaves.mac.");
 
 				for (const auto &key : keys) {
@@ -140,6 +181,7 @@ public:
 				std::vector<uint8_t> packet(espParser.payload(), espParser.payload() + espParser.payloadSize());
 				inbox.push(std::move(packet));
 
+				lastMessageTimepoint = std::chrono::steady_clock::now();
 				espParser.reset();
 			}
 		}
@@ -157,5 +199,48 @@ public:
 		memcpy(aData, front.data(), len);
 		inbox.pop();
 		return len;
+	}
+
+private:
+	auto createPingPacket()
+	{
+		std::array<uint8_t, 9> packet = {0};
+		std::array<uint8_t, 6> mac = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+		uint8_t reserved = 0xAA;
+		espParser.assemblePacket(mac, &reserved, 1, packet.data(), packet.size());
+		return packet;
+	}
+
+	void threadFunction()
+	{
+		while (true) {
+			std::chrono::time_point<std::chrono::steady_clock> time = std::chrono::steady_clock::now();
+
+			switch (bridgeStatus.read()) {
+				case BridgeStatus::Lost: {
+					auto packet = createPingPacket();
+					write(packet.data(), packet.size());
+					if (lastHeartbeatTime.time_since_epoch().count() && time - lastHeartbeatTime >= std::chrono::seconds{5}) {
+						bridgeStatus.set(BridgeStatus::Ready);
+					}
+				} break;
+				case BridgeStatus::Ready: {
+					auto packet = createPingPacket();
+					write(packet.data(), packet.size());
+
+					if (time - lastHeartbeatTime <= std::chrono::seconds{5}) {
+						bridgeStatus.set(BridgeStatus::Lost);
+					}
+				} break;
+				case BridgeStatus::Working:
+					if (time - lastMessageTimepoint >= std::chrono::seconds{5}) {
+						lastHeartbeatTime = time;
+						bridgeStatus.set(BridgeStatus::Ready);
+					}
+					break;
+			}
+
+			std::this_thread::sleep_for(std::chrono::seconds{1});
+		}
 	}
 };

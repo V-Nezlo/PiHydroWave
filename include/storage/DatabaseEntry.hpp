@@ -5,10 +5,9 @@
 #include <memory>
 #include <string>
 
-template<typename T>
-class DataLogger : public AbstractEntryObserver {
+class DatabaseEntry : public AbstractEntryObserver {
 public:
-	DataLogger(std::string aName, std::shared_ptr<Blackboard> aBb, std::shared_ptr<Database> aDb):
+	DatabaseEntry(std::string aName, std::shared_ptr<Blackboard> aBb, std::shared_ptr<Database> aDb):
 		name{aName},
 		bb{aBb},
 		db{aDb}
