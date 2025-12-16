@@ -219,14 +219,14 @@ private:
 			switch (bridgeStatus.read()) {
 				case BridgeStatus::Lost: {
 					auto packet = createPingPacket();
-					write(packet.data(), packet.size());
+					driver->write(packet.data(), packet.size());
 					if (lastHeartbeatTime.time_since_epoch().count() && time - lastHeartbeatTime >= std::chrono::seconds{5}) {
 						bridgeStatus.set(BridgeStatus::Ready);
 					}
 				} break;
 				case BridgeStatus::Ready: {
 					auto packet = createPingPacket();
-					write(packet.data(), packet.size());
+					driver->write(packet.data(), packet.size());
 
 					if (time - lastHeartbeatTime <= std::chrono::seconds{5}) {
 						bridgeStatus.set(BridgeStatus::Lost);

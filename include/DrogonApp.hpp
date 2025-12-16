@@ -1,11 +1,21 @@
 #ifndef DROGON_HPP
 #define DROGON_HPP
 
+#include "BackRestController.hpp"
+#include "BackWebSocket.hpp"
+
 #include <drogon/HttpAppFramework.h>
 #include <thread>
 
 class DrogonApp {
 public:
+	DrogonApp(std::shared_ptr<BackRestController> aRest, std::shared_ptr<BackWebSocket> aSocket):
+		rest{aRest},
+		webSocket{aSocket}
+	{
+
+	}
+
 	void start()
 	{
 		thread = std::thread(&DrogonApp::threadFunc, this);
@@ -21,8 +31,14 @@ private:
 		drogon::app()
 			.addListener("0.0.0.0", 8848)
 			.setThreadNum(1)
+			.setDocumentRoot("/etc/www/pihydro/browser")
+			.registerController(rest)
+			.registerController(webSocket)
 			.run();
 	}
+
+	std::shared_ptr<BackRestController> rest;
+	std::shared_ptr<BackWebSocket> webSocket;
 };
 
 #endif // DROGON_HPP

@@ -19,7 +19,7 @@
 
 using json = nlohmann::json;
 
-class BackRestController : public drogon::HttpController<BackRestController> {
+class BackRestController : public drogon::HttpController<BackRestController, false> {
 public:
 	METHOD_LIST_BEGIN
 	ADD_METHOD_TO(BackRestController::getValue, "/entry", drogon::Get);
@@ -118,7 +118,7 @@ public:
 		callback(resp);
 	}
 
-	static void registerInterfaces(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aBus)
+	void registerInterfaces(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aBus)
 	{
 		bb = aBb;
 		bus = aBus;
@@ -161,13 +161,9 @@ public:
 	}
 
 private:
-	static std::shared_ptr<Blackboard> bb;
-	static std::shared_ptr<EventBus> bus;
-	static std::shared_ptr<Database> db;
+	std::shared_ptr<Blackboard> bb;
+	std::shared_ptr<EventBus> bus;
+	std::shared_ptr<Database> db;
 };
-
-std::shared_ptr<Blackboard> BackRestController::bb;
-std::shared_ptr<EventBus> BackRestController::bus;
-std::shared_ptr<Database> BackRestController::db;
 
 #endif // BACKEND_HPP

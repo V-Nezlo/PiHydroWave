@@ -10,12 +10,12 @@
 #include <string>
 #include <unordered_set>
 
-class BackWebSocket : public drogon::WebSocketController<BackWebSocket>, public AbstractEntryObserver, public EventBusObserver {
+class BackWebSocket : public drogon::WebSocketController<BackWebSocket, false>, public AbstractPrefixObserver, public EventBusObserver {
 public:
 	BackWebSocket() = default;
 
 	// AbstractEntryObserver interface
-	void onEntryUpdated(std::string_view entry, const std::any &value) override
+	void onPrefixUpdated(std::string_view /*prefix*/, std::string_view entry, const std::any &value) override
 	{
 		nlohmann::json msg{
 			{"type", "telemetry"},
@@ -51,10 +51,12 @@ public:
 		(void)type;
 	}
 
-	static void registerInterfaces(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aBus)
+	void registerInterfaces(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aBus)
 	{
 		bb = aBb;
 		bus = aBus;
+
+		bb->subscribeToPrefix("telem.", this);
 	}
 
 	// EventBusObserver interface
@@ -72,8 +74,8 @@ public:
 	WS_PATH_LIST_END
 
 private:
-	static std::shared_ptr<Blackboard> bb;
-	static std::shared_ptr<EventBus> bus;
+	std::shared_ptr<Blackboard> bb;
+	std::shared_ptr<EventBus> bus;
 
 	std::unordered_set<drogon::WebSocketConnectionPtr> telemetryClients;
 	std::unordered_set<drogon::WebSocketConnectionPtr> logClients;
@@ -106,8 +108,4 @@ private:
 		return "unsupported";
 	}
 };
-
-std::shared_ptr<Blackboard> BackWebSocket::bb;
-std::shared_ptr<EventBus> BackWebSocket::bus;
-
 #endif // BACKWEBSOCKET_HPP

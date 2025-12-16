@@ -44,9 +44,6 @@ int main(int argc, char *argv[])
 		DatabasePackage dbPackage(bb, db);
 	}
 
-	DrogonApp drogonApp;
-	drogonApp.start();
-
 	ConfigPackage config(args.configPath, bb);
 	if (!config.load()) {
 		std::cout << "Config not found, creating..." << std::endl;
@@ -59,10 +56,15 @@ int main(int argc, char *argv[])
 	PumpController pumpControl(bb, bus);
 	LampController lampControl(bb, bus);
 
-	BackRestController::registerInterfaces(bb, bus);
-	BackWebSocket::registerInterfaces(bb, bus);
+	std::shared_ptr<BackWebSocket> sock = std::make_shared<BackWebSocket>();
+	std::shared_ptr<BackRestController> rest = std::make_shared<BackRestController>();
 
-	BackWebSocket sock;
+	rest->registerInterfaces(bb, bus);
+	sock->registerInterfaces(bb, bus);
+	rest->initPathRouting();
+
+	DrogonApp drogonApp(rest, sock);
+	drogonApp.start();
 
 	while (true) {
 		if (!pumpControl.isStarted() && pumpControl.ready()) {
