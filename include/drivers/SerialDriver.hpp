@@ -97,7 +97,7 @@ public:
 		ssize_t ret = ::write(fd, aData, aLength);
 
 		if (ret < 0) {
-			throw std::runtime_error("Serial write() failed: " + std::string(strerror(errno)));
+			// Пока игнорируем, такое может случаться
 		}
 
 		return static_cast<size_t>(ret);

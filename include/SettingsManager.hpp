@@ -13,8 +13,8 @@
 
 using json = nlohmann::json;
 
-enum class SettingType { BOOL, INT, FLOAT, U64, UNSIGNED };
-using SettingValue = std::variant<bool, int, double, uint64_t>;
+enum class SettingType { BOOL, INT, FLOAT, U64, UNSIGNED, STRING };
+using SettingValue = std::variant<bool, int, double, uint64_t, std::string>;
 
 struct SettingDefinition {
 	std::string key;

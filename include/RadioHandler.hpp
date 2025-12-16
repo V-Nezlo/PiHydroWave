@@ -94,9 +94,17 @@ public:
 		}
 	}
 
+	void probe()
+	{
+		return hub.probeAll(true, true);
+	}
+
 	void processThread()
 	{
-		hub.process(TimeWrapper::milliseconds());
+		while(true) {
+			hub.process(TimeWrapper::milliseconds());
+			std::this_thread::sleep_for(std::chrono::milliseconds{50});
+		}
 	}
 
 	// DeviceHubObserver interface

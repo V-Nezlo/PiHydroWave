@@ -235,6 +235,7 @@ std::string SettingsManager::toString(SettingType type)
 		case SettingType::FLOAT:    return "float";
 		case SettingType::U64:      return "uint64";
 		case SettingType::UNSIGNED: return "unsigned";
+		case SettingType::STRING:   return "string";
 	}
 	return "unknown";
 }

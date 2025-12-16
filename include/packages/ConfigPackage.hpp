@@ -2,11 +2,12 @@
 
 #include "SettingsManager.hpp"
 #include "core/Blackboard.hpp"
+#include "core/Helpers.hpp"
 #include <memory>
 #include <string>
 
 struct ConfigPackage {
-	ConfigPackage(std::string aFileName, std::shared_ptr<Blackboard> aBb):
+	ConfigPackage(std::string aFileName, std::shared_ptr<Blackboard> aBb) :
 		name{aFileName},
 		bb{aBb},
 		manager{aBb, aFileName}
@@ -29,8 +30,7 @@ struct ConfigPackage {
 		manager.registerSetting("config.pump.maxFloodTime", SettingType::UNSIGNED, 0, "Max time for tank flooding in secs");
 		manager.registerSetting("config.pump.minWaterLevel", SettingType::UNSIGNED, 0, "Minimal water level in percent for pump operation");
 
-		manager.registerSetting("slaves.mac.1", SettingType::U64, 0xaabbccddeeUL, "MAC SLOT 1");
-		manager.registerSetting("slaves.mac.2", SettingType::U64, 0xaabbccddeeUL, "MAC SLOT 2");
+		manager.registerSetting("slaves.mac.1", SettingType::STRING, "E8:31:CD:D6:D1:B4", "MAC1");
 	}
 
 	bool load()

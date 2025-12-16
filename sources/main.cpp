@@ -66,6 +66,9 @@ int main(int argc, char *argv[])
 	DrogonApp drogonApp(rest, sock);
 	drogonApp.start();
 
+	std::this_thread::sleep_for(std::chrono::milliseconds{250});
+	radioHandler.probe();
+
 	while (true) {
 		if (!pumpControl.isStarted() && pumpControl.ready()) {
 			pumpControl.start();

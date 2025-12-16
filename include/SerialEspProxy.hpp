@@ -2,7 +2,9 @@
 
 #include "core/Blackboard.hpp"
 #include "core/BlackboardEntry.hpp"
+#include "core/Helpers.hpp"
 #include "core/InterfaceList.hpp"
+#include "core/Types.hpp"
 
 //#include <EspNowUSBProto/Parser.hpp>
 #include "../lib/EspNowProto/include/EspNowUSBProto/Parser.hpp"
@@ -15,7 +17,10 @@
 #include <chrono>
 #include <memory>
 #include <queue>
+#include <string>
 #include <thread>
+#include <tuple>
+#include <unordered_map>
 
 class SerialEspProxy : public AbstractSerial {
 	using Parser = RS::RsParser<64, Crc8>;
@@ -36,14 +41,9 @@ class SerialEspProxy : public AbstractSerial {
 	std::chrono::time_point<std::chrono::steady_clock> lastHeartbeatTime;
 	std::chrono::time_point<std::chrono::steady_clock> lastMessageTimepoint;
 
-	struct MacSlot {
-		uint8_t mac[6];
-		uint8_t reserved;
-		uint8_t uid;
-	};
-
 	std::thread thread;
 	BlackboardEntry<BridgeStatus> bridgeStatus;
+	std::unordered_map<std::string, uint8_t> uidMap;
 
 public:
 	SerialEspProxy(AbstractSerial *aDriver, std::shared_ptr<Blackboard> aBb) :
@@ -54,7 +54,8 @@ public:
 		lastHeartbeatTime{std::chrono::milliseconds{0}},
 		lastMessageTimepoint{std::chrono::milliseconds{0}},
 		thread{},
-		bridgeStatus{"bridge.status", bb}
+		bridgeStatus{"bridge.status", bb},
+		uidMap{}
 	{
 		bridgeStatus.set(BridgeStatus::Lost);
 	}
@@ -78,41 +79,38 @@ public:
 		if (uid == RS::kReservedUID) {
 			// Широковещательный UID, нужно отправить всем доступным MAC адресам
 			for (const auto &key : keys) {
-				if (bb->get<uint64_t>(key).has_value()) {
-					uint64_t pack = bb->get<uint64_t>(key).value();
-					MacSlot slot;
-					memcpy(&slot, &pack, sizeof(pack));
-					memcpy(macArray.data(), &slot.mac, macArray.size());
+				if (const auto macStr = bb->get<std::string>(key)) {
+					if (Helpers::unpackMac(macStr.value(), macArray)) {
+						uint8_t message[250];
+						const size_t len = espParser.assemblePacket(macArray, aData, aLength, message, sizeof(message));
 
-					uint8_t message[250];
-					const size_t len = espParser.assemblePacket(macArray, aData, aLength, message, sizeof(message));
-
-					if (len) {
-						driver->write(message, len);
-					} else {
-						return 0;
+						if (len) {
+							driver->write(message, len);
+						} else {
+							return 0;
+						}
 					}
 				}
 			}
 		} else {
 			// Common сообщение, отправляем требуемому адресату
 			for (const auto &key : keys) {
-				if (bb->get<uint64_t>(key).has_value()) {
-					uint64_t pack = bb->get<uint64_t>(key).value();
-					MacSlot slot;
-					memcpy(&slot, &pack, sizeof(pack));
+				if (const auto macStr = bb->get<std::string>(key)) {
+					// Найдем UID из таблицы MAC адресов
+					if (uidMap.contains(macStr.value())) {
+						if (uidMap.at(macStr.value()) == uid) {
+							if (Helpers::unpackMac(macStr.value(), macArray)) {
+								uint8_t message[250];
+								const size_t len
+									= espParser.assemblePacket(macArray, aData, aLength, message, sizeof(message));
 
-					if (slot.uid == uid) {
-						memcpy(macArray.data(), &slot.mac, macArray.size());
-
-						uint8_t message[250];
-						const size_t len = espParser.assemblePacket(macArray, aData, aLength, message, sizeof(message));
-
-						if (len) {
-							driver->write(message, len);
-							break;
-						} else {
-							return 0;
+								if (len) {
+									driver->write(message, len);
+									break;
+								} else {
+									return 0;
+								}
+							}
 						}
 					}
 				}
@@ -142,9 +140,13 @@ public:
 			if (espParser.state() == EspNowBinaryParser::State::Done) {
 				// Вот тут уже должно быть собранное сообщение UtilitaryRS
 				// Соотнесем UID и MAC через парсинг хедера
-				const uint8_t uid = Parser::getReceiverFromMsg(espParser.payload(), espParser.payloadSize());
+				const uint8_t uid = Parser::getTranceiverFromMsg(espParser.payload(), espParser.payloadSize());
 				std::array<uint8_t, 6> newMac;
-				espParser.getMac(newMac);
+
+				// Safety
+				if (!espParser.getMac(newMac)) {
+					return;
+				}
 
 				// 0xFF MAC это пинг от бриджа, нет смысла делать что-то с пакетом дальше
 				if (newMac[0] == 0xFF && newMac[1] == 0xFF && newMac[2] == 0xFF && newMac[3] == 0xFF
@@ -156,25 +158,14 @@ public:
 				}
 
 				const auto keys = bb->getKeysByPrefix("slaves.mac.");
+				// Проверять MAC нет смысла, разрулится автоматически
+				// Вместо этого посмотрим зареган ли он в таблице MAC-UID
+				const auto macStr = Helpers::packMac(newMac);
+				const bool alreadyRegistered = uidMap.contains(macStr);
 
-				for (const auto &key : keys) {
-					if (const auto entry = bb->get<uint64_t>(key)) {
-						MacSlot slot;
-						memcpy(&slot, &entry.value(), sizeof(slot));
-						std::array<uint8_t, 6> mac;
-						memcpy(mac.data(), &slot.mac, mac.size());
-
-						if (mac == newMac) {
-							// Если UID холостой - заполняем, иначе - не трогаем, UtilitaryRS сам разберется от кого
-							if (slot.uid == RS::kReservedUID) {
-								slot.uid = uid;
-
-								uint64_t packed;
-								memcpy(&packed, &slot, sizeof(packed));
-								bb->set(key, packed);
-							}
-						}
-					}
+				// Если не зареган - зарегаем, чтобы было понятно кому отправлять
+				if (!alreadyRegistered) {
+					uidMap[macStr] = uid;
 				}
 
 				// Сохраняем полезную нагрузку во внутреннюю очередь
@@ -220,7 +211,8 @@ private:
 				case BridgeStatus::Lost: {
 					auto packet = createPingPacket();
 					driver->write(packet.data(), packet.size());
-					if (lastHeartbeatTime.time_since_epoch().count() && time - lastHeartbeatTime >= std::chrono::seconds{5}) {
+					if (lastHeartbeatTime.time_since_epoch().count()
+						&& time - lastHeartbeatTime >= std::chrono::seconds{5}) {
 						bridgeStatus.set(BridgeStatus::Ready);
 					}
 				} break;
