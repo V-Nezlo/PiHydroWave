@@ -43,7 +43,7 @@ class SerialEspProxy : public AbstractSerial {
 
 	std::thread thread;
 	BlackboardEntry<BridgeStatus> bridgeStatus;
-	std::unordered_map<std::string, uint8_t> uidMap;
+	std::unordered_map<std::string, std::vector<uint8_t>> uidMap;
 
 public:
 	SerialEspProxy(AbstractSerial *aDriver, std::shared_ptr<Blackboard> aBb) :
@@ -96,9 +96,13 @@ public:
 			// Common сообщение, отправляем требуемому адресату
 			for (const auto &key : keys) {
 				if (const auto macStr = bb->get<std::string>(key)) {
-					// Найдем UID из таблицы MAC адресов
+					// Если есть соответствующая запись в таблице MAC->UID
 					if (uidMap.contains(macStr.value())) {
-						if (uidMap.at(macStr.value()) == uid) {
+						// Проверим какие UID принадлежат этому адресу
+						auto val = uidMap.at(macStr.value());
+						auto it = std::find(val.begin(), val.end(), uid);
+						// Если нашли нужный - отправляем
+						if (it != val.end()) {
 							if (Helpers::unpackMac(macStr.value(), macArray)) {
 								uint8_t message[250];
 								const size_t len
@@ -161,11 +165,18 @@ public:
 				// Проверять MAC нет смысла, разрулится автоматически
 				// Вместо этого посмотрим зареган ли он в таблице MAC-UID
 				const auto macStr = Helpers::packMac(newMac);
-				const bool alreadyRegistered = uidMap.contains(macStr);
+				const bool haveMac = uidMap.contains(macStr);
 
-				// Если не зареган - зарегаем, чтобы было понятно кому отправлять
-				if (!alreadyRegistered) {
-					uidMap[macStr] = uid;
+				// Если такой MAC уже зарегистрирован - пробежимся по списку UID
+				if (haveMac) {
+					auto &val = uidMap.at(macStr);
+					auto it = std::find(val.begin(), val.end(), uid);
+					// Если UID не найден - запихнем новый
+					if (it == val.end()) {
+						val.push_back(uid);
+					}
+				} else {
+					uidMap[macStr].push_back(uid);
 				}
 
 				// Сохраняем полезную нагрузку во внутреннюю очередь
@@ -212,7 +223,7 @@ private:
 					auto packet = createPingPacket();
 					driver->write(packet.data(), packet.size());
 					if (lastHeartbeatTime.time_since_epoch().count()
-						&& time - lastHeartbeatTime >= std::chrono::seconds{5}) {
+						&& time - lastHeartbeatTime <= std::chrono::seconds{5}) {
 						bridgeStatus.set(BridgeStatus::Ready);
 					}
 				} break;
@@ -220,7 +231,9 @@ private:
 					auto packet = createPingPacket();
 					driver->write(packet.data(), packet.size());
 
-					if (time - lastHeartbeatTime <= std::chrono::seconds{5}) {
+					if (time - lastMessageTimepoint <= std::chrono::seconds{5}) {
+						bridgeStatus.set(BridgeStatus::Working);
+					} else if (time - lastHeartbeatTime >= std::chrono::seconds{5}) {
 						bridgeStatus.set(BridgeStatus::Lost);
 					}
 				} break;
