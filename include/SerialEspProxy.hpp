@@ -4,7 +4,6 @@
 #include "core/BlackboardEntry.hpp"
 #include "core/Helpers.hpp"
 #include "core/InterfaceList.hpp"
-#include "core/Types.hpp"
 
 //#include <EspNowUSBProto/Parser.hpp>
 #include "../lib/EspNowProto/include/EspNowUSBProto/Parser.hpp"

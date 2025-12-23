@@ -1,38 +1,41 @@
-#ifndef BACKWEBSOCKET_HPP
-#define BACKWEBSOCKET_HPP
+#pragma once
 
-#include "nlohmann/json.hpp"
-#include <drogon/WebSocketConnection.h>
-#include <drogon/WebSocketController.h>
+#include "logger/Logger.hpp"
 #include <core/Blackboard.hpp>
 #include <core/EventBus.hpp>
+#include <core/Helpers.hpp>
+#include <core/Types.hpp>
+
+#include <nlohmann/json.hpp>
+#include <drogon/WebSocketConnection.h>
+#include <drogon/WebSocketController.h>
+
 #include <mutex>
 #include <string>
 #include <unordered_set>
 
-class BackWebSocket : public drogon::WebSocketController<BackWebSocket, false>, public AbstractPrefixObserver, public EventBusObserver {
+class BackWebSocket : public drogon::WebSocketController<BackWebSocket, false>, public AbstractPrefixObserver {
 public:
 	BackWebSocket() = default;
 
 	// AbstractEntryObserver interface
 	void onPrefixUpdated(std::string_view /*prefix*/, std::string_view entry, const std::any &value) override
 	{
-		nlohmann::json msg{
-			{"type", "telemetry"},
-			{"key", entry},
-			{"value", toJson(value)}
-		};
+		nlohmann::json msg{{"type", "telemetry"}, {"key", entry}, {"value", toJson(value)}};
 		broadcastTelemetry(msg.dump());
 	}
 
-	void handleNewConnection(const drogon::HttpRequestPtr &req,
-							 const drogon::WebSocketConnectionPtr &conn) override
+	void handleNewConnection(const drogon::HttpRequestPtr &req, const drogon::WebSocketConnectionPtr &conn) override
 	{
 		auto path = req->path();
 		std::lock_guard lock(mutex);
 
-		if (path == "/ws/telemetry") telemetryClients.insert(conn);
-		else if (path == "/ws/logs") logClients.insert(conn);
+		if (path == "/ws/telemetry")
+			telemetryClients.insert(conn);
+		else if (path == "/ws/logs")
+			logClients.insert(conn);
+
+		HYDRO_LOG_INFO("New websocket connection on path: " + path);
 	}
 
 	void handleConnectionClosed(const drogon::WebSocketConnectionPtr &conn) override
@@ -40,11 +43,12 @@ public:
 		std::lock_guard lock(mutex);
 		telemetryClients.erase(conn);
 		logClients.erase(conn);
+
+		HYDRO_LOG_INFO("Web socket closed");
 	}
 
-	void handleNewMessage(const drogon::WebSocketConnectionPtr &conn,
-					   std::string &&message,
-					   const drogon::WebSocketMessageType &type) override
+	void handleNewMessage(const drogon::WebSocketConnectionPtr &conn, std::string &&message,
+		const drogon::WebSocketMessageType &type) override
 	{
 		(void)message;
 		(void)conn;
@@ -59,13 +63,13 @@ public:
 		bb->subscribeToPrefix("telem.", this);
 	}
 
-	// EventBusObserver interface
-	void handleEvent(EventType aEv, std::any &aValue) override
+	void log(Log::Level aLevel, std::string &msg)
 	{
-		if (aEv == EventType::Log) {
-			std::string msg = std::any_cast<std::string>(aValue);
-			broadcastLogs(msg);
-		}
+		std::string message = Helpers::getLogLevelName(aLevel);
+		message += ": ";
+		message += msg;
+
+		broadcastLogs(message);
 	}
 
 	WS_PATH_LIST_BEGIN
@@ -87,7 +91,8 @@ private:
 		std::lock_guard lock(mutex);
 
 		for (auto &c : telemetryClients)
-			if (c->connected()) c->send(msg);
+			if (c->connected())
+				c->send(msg);
 	}
 
 	void broadcastLogs(const std::string &msg)
@@ -95,17 +100,22 @@ private:
 		std::lock_guard lock(mutex);
 
 		for (auto &c : logClients)
-			if (c->connected()) c->send(msg);
+			if (c->connected())
+				c->send(msg);
 	}
 
-	static nlohmann::json toJson(const std::any& v)
+	static nlohmann::json toJson(const std::any &v)
 	{
-		if (v.type() == typeid(int)) return std::any_cast<int>(v);
-		if (v.type() == typeid(double)) return std::any_cast<double>(v);
-		if (v.type() == typeid(bool)) return std::any_cast<bool>(v);
-		if (v.type() == typeid(std::string)) return std::any_cast<std::string>(v);
-		if (v.type() == typeid(uint64_t)) return std::any_cast<uint64_t>(v);
+		if (v.type() == typeid(int))
+			return std::any_cast<int>(v);
+		if (v.type() == typeid(double))
+			return std::any_cast<double>(v);
+		if (v.type() == typeid(bool))
+			return std::any_cast<bool>(v);
+		if (v.type() == typeid(std::string))
+			return std::any_cast<std::string>(v);
+		if (v.type() == typeid(uint64_t))
+			return std::any_cast<uint64_t>(v);
 		return "unsupported";
 	}
 };
-#endif // BACKWEBSOCKET_HPP

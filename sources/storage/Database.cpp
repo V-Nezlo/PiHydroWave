@@ -4,7 +4,6 @@ Database::Database(const std::string &dbPath)
 {
 	namespace fs = std::filesystem;
 
-	// Делаем абсолютный путь
 	fs::path abs = fs::absolute(dbPath);
 	dbFilePath = abs.string();
 
@@ -43,6 +42,19 @@ void Database::insertAny(const std::string &key, const std::any &value)
 	}
 	catch (const std::exception &e) {
 		std::cerr << "[DB] Insert telemetry ERROR: " << e.what() << "\n";
+	}
+}
+
+void Database::insertText(unsigned level, const std::string &msg)
+{
+	try {
+		dbClient->execSqlSync(
+			"INSERT INTO text_logs (level, message, timestamp) "
+			"VALUES (?, ?, ?, datetime('now'))",
+			level, msg
+			);
+	} catch (const std::exception &e) {
+		std::cerr << "[DB] insertText ERROR: " << e.what() << "\n";
 	}
 }
 
@@ -113,6 +125,15 @@ void Database::initSchema()
 			" value REAL NOT NULL,"
 			" timestamp TEXT NOT NULL"
 			");"
+			);
+
+		dbClient->execSqlSync(
+			"CREATE TABLE IF NOT EXISTS text_logs ("
+			" id INTEGER PRIMARY KEY AUTOINCREMENT,"
+			" level INTEGER NOT NULL,"
+			" message TEXT NOT NULL,"
+			" timestamp TEXT NOT NULL"
+			" );"
 			);
 
 		std::cout << "[DB] Schema OK\n";

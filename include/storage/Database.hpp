@@ -1,10 +1,10 @@
 #pragma once
 
-#include "core/BlackboardEntry.hpp"
-
 #include <drogon/orm/DbClient.h>
 #include <filesystem>
 #include <iostream>
+#include <any>
+#include <string>
 
 class Database {
 	struct TelemetryValue {
@@ -14,6 +14,7 @@ class Database {
 public:
 	explicit Database(const std::string &dbPath);
 	void insertAny(const std::string &key, const std::any &value);
+	void insertText(unsigned level, const std::string &msg);
 
 	std::vector<std::tuple<std::string, std::string, double, std::string>>
 	queryHistory(const std::string &key,

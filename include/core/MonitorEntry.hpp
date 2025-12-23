@@ -1,7 +1,6 @@
-#ifndef MONITORENTRY_HPP
-#define MONITORENTRY_HPP
+#pragma once
 
-#include "core/Blackboard.hpp"
+#include <core/Blackboard.hpp>
 #include <memory>
 #include <type_traits>
 
@@ -62,5 +61,3 @@ private:
 		return bb->has(name);
 	}
 };
-
-#endif // MONITORENTRY_HPP

@@ -7,6 +7,7 @@
 */
 
 #include "LampController.hpp"
+#include "logger/Logger.hpp"
 #include <any>
 #include <chrono>
 #include <ctime>
@@ -41,10 +42,10 @@ bool LampController::ready() const
 	const auto maintanceB = maintance.present();
 
 	if (enabledB && stateB && onTimeB && offTimeB && maintanceB) {
-		bus->sendEvent(EventType::Log, std::string("Lamp Controller ready!"));
+		HYDRO_LOG_INFO("Lamp Controller ready!");
 		return true;
 	} else {
-		bus->sendEvent(EventType::Log, std::string("Lamp Controller not ready!"));
+		HYDRO_LOG_INFO("Lamp Controller not ready!");
 		return false;
 	}
 }

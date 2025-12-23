@@ -1,17 +1,12 @@
-#ifndef HELPERS_HPP
-#define HELPERS_HPP
+#pragma once
 
-#include "core/Types.hpp"
+#include <core/Types.hpp>
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <string>
 
 namespace Helpers {
-
-#include <array>
-#include <cstdint>
-#include <string>
 
 static int hexNibble(char c)
 {
@@ -21,7 +16,7 @@ static int hexNibble(char c)
 	return -1;
 }
 
-static std::string packMac(std::array<uint8_t, 6> aMac)
+static inline std::string packMac(std::array<uint8_t, 6> aMac)
 {
 	static const char *hex = "0123456789ABCDEF";
 	std::string out(17, '0'); // "XX:XX:XX:XX:XX:XX"
@@ -36,7 +31,7 @@ static std::string packMac(std::array<uint8_t, 6> aMac)
 }
 
 // Возвращает true если строка строго в формате "XX:XX:XX:XX:XX:XX"
-static bool unpackMac(const std::string &aStr, std::array<uint8_t, 6> &out)
+static inline bool unpackMac(const std::string &aStr, std::array<uint8_t, 6> &out)
 {
 	if (aStr.size() != 17) return false;
 
@@ -55,7 +50,23 @@ static bool unpackMac(const std::string &aStr, std::array<uint8_t, 6> &out)
 	return true;
 }
 
+static inline std::string getLogLevelName(Log::Level aLevel)
+{
+	switch(aLevel) {
+		case Log::Level::DEBUG:
+			return "Debug";
+		case Log::Level::ERROR:
+			return "Error";
+		case Log::Level::INFO:
+			return "Info";
+		case Log::Level::TRACE:
+			return "Trace";
+		case Log::Level::WARN:
+			return "Warning";
+		default:
+			return "Unknown";
+	}
+}
+
 
 } // namespace Helpers
-
-#endif // HELPERS_HPP

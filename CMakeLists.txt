@@ -1,10 +1,22 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 project(PiHydroWave CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
+set(VERSION_HEADER "${CMAKE_BINARY_DIR}/generated/version.hpp")
+
+add_custom_command(
+    OUTPUT ${VERSION_HEADER}
+    COMMAND ${CMAKE_SOURCE_DIR}/genver.sh ${VERSION_HEADER}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    DEPENDS ${CMAKE_SOURCE_DIR}/genver.sh
+    COMMENT "Generating version.hpp from Git"
+)
+
+add_custom_target(genver ALL DEPENDS ${VERSION_HEADER})
 
 # Общие флаги
 set(COMMON_FLAGS

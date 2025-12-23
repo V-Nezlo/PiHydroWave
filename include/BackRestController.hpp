@@ -1,18 +1,18 @@
-#ifndef BACKEND_HPP
-#define BACKEND_HPP
+#pragma once
+
+#include <core/Blackboard.hpp>
+#include <core/EventBus.hpp>
 
 #include "json/value.h"
-#include <any>
-#include <drogon/HttpResponse.h>
-#include <memory>
-#include <nlohmann/json.hpp>
-
-#include "core/Blackboard.hpp"
-#include "core/EventBus.hpp"
 #include <drogon/HttpController.h>
+#include <drogon/HttpResponse.h>
 #include <drogon/HttpTypes.h>
 #include <drogon/RequestStream.h>
 #include <drogon/WebSocketController.h>
+#include <nlohmann/json.hpp>
+
+#include <any>
+#include <memory>
 #include <sstream>
 #include <storage/Database.hpp>
 #include <string>
@@ -27,7 +27,7 @@ public:
 	ADD_METHOD_TO(BackRestController::getHistory, "/history", drogon::Get);
 	METHOD_LIST_END
 
-	void getValue(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback)
+	void getValue(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr &)> &&callback)
 	{
 		using namespace drogon;
 
@@ -45,20 +45,30 @@ public:
 				}
 
 				if (bb->isType<bool>(key)) {
-					if (auto v = bb->get<bool>(key)) result[key] = *v;
-					else result[key] = Json::nullValue;
+					if (auto v = bb->get<bool>(key))
+						result[key] = *v;
+					else
+						result[key] = Json::nullValue;
 				} else if (bb->isType<int>(key)) {
-					if (auto v = bb->get<int>(key)) result[key] = *v;
-					else result[key] = Json::nullValue;
+					if (auto v = bb->get<int>(key))
+						result[key] = *v;
+					else
+						result[key] = Json::nullValue;
 				} else if (bb->isType<uint64_t>(key)) {
-					if (auto v = bb->get<uint64_t>(key)) result[key] = *v;
-					else result[key] = Json::nullValue;
+					if (auto v = bb->get<uint64_t>(key))
+						result[key] = *v;
+					else
+						result[key] = Json::nullValue;
 				} else if (bb->isType<double>(key)) {
-					if (auto v = bb->get<double>(key)) result[key] = *v;
-					else result[key] = Json::nullValue;
+					if (auto v = bb->get<double>(key))
+						result[key] = *v;
+					else
+						result[key] = Json::nullValue;
 				} else if (bb->isType<std::string>(key)) {
-					if (auto v = bb->get<std::string>(key)) result[key] = *v;
-					else result[key] = Json::nullValue;
+					if (auto v = bb->get<std::string>(key))
+						result[key] = *v;
+					else
+						result[key] = Json::nullValue;
 				} else {
 					// Неизвестный/сложный тип — возвращаем строковое представление типа
 					result[key] = bb->getTypeName(key);
@@ -70,7 +80,7 @@ public:
 		callback(resp);
 	}
 
-	void setValue(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr&)>&& callback)
+	void setValue(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr &)> &&callback)
 	{
 		using namespace drogon;
 
@@ -124,16 +134,15 @@ public:
 		bus = aBus;
 	}
 
-	void getHistory(const drogon::HttpRequestPtr &req,
-					std::function<void(const drogon::HttpResponsePtr &)> &&callback)
+	void getHistory(const drogon::HttpRequestPtr &req, std::function<void(const drogon::HttpResponsePtr &)> &&callback)
 	{
 		using namespace drogon;
 
 		const auto params = req->getParameters();
-		std::string key     = params.count("key") ? params.at("key") : "";
-		std::string fromTs  = params.count("from") ? params.at("from") : "1970-01-01 00:00:00";
-		std::string toTs    = params.count("to")   ? params.at("to")   : "9999-12-31 23:59:59";
-		size_t limit        = params.count("limit") ? std::stoul(params.at("limit")) : 1000;
+		std::string key = params.count("key") ? params.at("key") : "";
+		std::string fromTs = params.count("from") ? params.at("from") : "1970-01-01 00:00:00";
+		std::string toTs = params.count("to") ? params.at("to") : "9999-12-31 23:59:59";
+		size_t limit = params.count("limit") ? std::stoul(params.at("limit")) : 1000;
 
 		if (key.empty()) {
 			auto resp = HttpResponse::newHttpResponse();
@@ -165,5 +174,3 @@ private:
 	std::shared_ptr<EventBus> bus;
 	std::shared_ptr<Database> db;
 };
-
-#endif // BACKEND_HPP

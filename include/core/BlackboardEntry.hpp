@@ -1,18 +1,15 @@
 #ifndef BLACKBOARDENTRY_HPP
 #define BLACKBOARDENTRY_HPP
 
-#include "core/Blackboard.hpp"
-#include <type_traits>
+#include <core/Blackboard.hpp>
 #include <memory>
+#include <type_traits>
 
 template<typename T>
 class BlackboardEntry {
 public:
-	BlackboardEntry(std::string aName, std::shared_ptr<Blackboard> aBb):
-		name{aName},
-		bb{aBb}
+	BlackboardEntry(std::string aName, std::shared_ptr<Blackboard> aBb) : name{aName}, bb{aBb}
 	{
-
 	}
 
 	bool set(T aValue)

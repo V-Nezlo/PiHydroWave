@@ -235,13 +235,19 @@ private:
 			// Копируем наблюдатели для префиксов
 			for (const auto &[prefix, observers] : prefixObservers) {
 				if (keyStr.find(prefix) == 0) {
-					for (auto *observer : observers) { prefixObserversCopy.emplace_back(prefix, observer); }
+					for (auto *observer : observers) {
+						prefixObserversCopy.emplace_back(prefix, observer);
+					}
 				}
 			}
 		}
 
 		// Уведомляем наблюдатели вне мьютекса
-		for (auto *observer : keyObserversCopy) { observer->onEntryUpdated(key, value); }
-		for (auto &[prefix, observer] : prefixObserversCopy) { observer->onPrefixUpdated(prefix, key, value); }
+		for (auto *observer : keyObserversCopy) {
+			observer->onEntryUpdated(key, value);
+		}
+		for (auto &[prefix, observer] : prefixObserversCopy) {
+			observer->onPrefixUpdated(prefix, key, value);
+		}
 	}
 };

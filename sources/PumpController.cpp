@@ -10,6 +10,7 @@
 #include "core/EventBus.hpp"
 #include "core/MonitorEntry.hpp"
 #include "core/Types.hpp"
+#include "logger/Logger.hpp"
 #include <any>
 #include <chrono>
 #include <mutex>
@@ -72,10 +73,10 @@ bool PumpController::ready() const
 
 	// Провалидирую все требуемые настройки
 	if (enabledB && presentB && modeB && stateB && desiredStateB && pumpOnTimeB && pumpOffTimeB && upperStateB && swingTimeB && validTimeB && maxFloodTimeB && plainTypeB && swingStateB && maintanceB) {
-		bus->sendEvent(EventType::Log, std::string("Pump Controller ready!"));
+		HYDRO_LOG_INFO("Pump Controller ready!");
 		return true;
 	} else {
-		bus->sendEvent(EventType::Log, std::string("Pump Controller not ready!"));
+		HYDRO_LOG_INFO("Pump Controller not ready!");
 		return false;
 	}
 }
@@ -87,7 +88,7 @@ void PumpController::start()
 	thread = std::thread(&PumpController::process, this);
 	thread.detach();
 
-	bus->sendEvent(EventType::Log, std::string("Pump Controller started!"));
+	HYDRO_LOG_INFO("Pump Controller started!");
 }
 
 bool PumpController::isStarted() const

@@ -4,6 +4,8 @@
 #include "core/Blackboard.hpp"
 #include "core/BlackboardEntry.hpp"
 #include "core/EventBus.hpp"
+#include "core/Types.hpp"
+#include "logger/Logger.hpp"
 #include "core/RadioTypes.hpp"
 #include "core/TimeWrapper.hpp"
 #include "drivers/SerialDriver.hpp"
@@ -15,16 +17,15 @@
 #include <UtilitaryRS/RsTypes.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <thread>
 
 using namespace std::chrono_literals;
 
-template<class DeviceHub>
 class RadioHandler : public RS::DeviceHubObserver, public EventBusObserver {
 	using Hub = RS::DeviceHub<10, SerialEspProxy, TimeWrapper, Crc8, Crc64, 256>;
-	using ThisClass = RadioHandler<DeviceHub>;
 
 	using milliseconds = std::chrono::milliseconds;
 	using seconds = std::chrono::seconds;
@@ -59,16 +60,19 @@ public:
 		waterLevel{"pump.waterLevel", aBb}
 	{
 		hub.registerObserver(this);
+		bus->registerObserver(this);
 	}
 
 	void start()
 	{
 		proxy.start();
 
-		receive = std::thread(&ThisClass::receiveThread, this);
+		receive = std::thread(&RadioHandler::receiveThread, this);
 		receive.detach();
-		transmit = std::thread(&ThisClass::processThread, this);
+		transmit = std::thread(&RadioHandler::processThread, this);
 		transmit.detach();
+
+		createSchedules();
 	}
 
 	void receiveThread()
@@ -101,7 +105,7 @@ public:
 
 	void processThread()
 	{
-		while(true) {
+		while (true) {
 			hub.process(TimeWrapper::milliseconds());
 			std::this_thread::sleep_for(std::chrono::milliseconds{50});
 		}
@@ -110,24 +114,23 @@ public:
 	// DeviceHubObserver interface
 	void onAckNotReceivedEv(const std::string &aName, RS::MessageType) override
 	{
-		bus->sendEvent(EventType::Log, aName + " Not answered");
+		HYDRO_LOG_TRACE(aName + " Not answered");
 	}
 
 	void onAckReceivedEv(const std::string &aName, RS::MessageType aMessage, RS::Result aCode) override
 	{
-		bus->sendEvent(EventType::Log,
-			aName + " Ack, message: " + std::to_string(static_cast<uint8_t>(aMessage)) + " : "
-				+ RS::Helpers::retToString(aCode));
+		HYDRO_LOG_TRACE(			aName + " Ack, message: " + std::to_string(static_cast<uint8_t>(aMessage)) + " : "
+		+ RS::Helpers::retToString(aCode));
 	}
 
 	void onCommandResultEv(const std::string &aName, RS::Result aReturn) override
 	{
-		bus->sendEvent(EventType::Log, aName + " Command returned " + RS::Helpers::retToString(aReturn));
+		HYDRO_LOG_TRACE(aName + " Command returned " + RS::Helpers::retToString(aReturn));
 	}
 
 	void onRequestErrorEv(const std::string &aName, RS::Result aReturn) override
 	{
-		bus->sendEvent(EventType::Log, aName + " Request error: " + RS::Helpers::retToString(aReturn));
+		HYDRO_LOG_TRACE(aName + " Request error: " + RS::Helpers::retToString(aReturn));
 	}
 
 	RS::Result blobAnswerEvReceived(
@@ -137,15 +140,22 @@ public:
 
 		if (aName == "pump" && aRequest == static_cast<uint8_t>(Requests::RequestTelemetry)
 			&& aSize == sizeof(PumpTelemetry)) {
+
 			PumpTelemetry telem;
 			memcpy(&telem, aData, aSize);
-			bb->set(keyName, telem);
+
+			pumpState.set(telem.pumpState);
+			waterLevel.set(telem.waterLevel);
+
 			return RS::Result::Ok;
 		} else if (aName == "lamp" && aRequest == static_cast<uint8_t>(Requests::RequestTelemetry)
 			&& aSize == sizeof(LampTelemetry)) {
+
 			LampTelemetry telem;
 			memcpy(&telem, aData, aSize);
-			bb->set(keyName, telem);
+
+			lampState.set(telem.lampState);
+
 			return RS::Result::Ok;
 		} else {
 			return RS::Result::Error;
@@ -161,13 +171,14 @@ public:
 	void deviceLostEv(const std::string &aName) override
 	{
 		bb->set(std::string(aName + ".present"), false);
-		bus->sendEvent(EventType::Log, aName + "Device lost");
+		HYDRO_LOG_ERROR(aName + "Device lost");
 	}
 
 	RS::Result fileWriteResultEv(const std::string &aName, RS::Result aReturn) override
 	{
 		// Firmware updater
-		bus->sendEvent(EventType::Log, aName + "File write result: " + RS::Helpers::retToString(aReturn));
+		HYDRO_LOG_INFO(aName + "File write result: " + RS::Helpers::retToString(aReturn));
+		return RS::Result::Ok;
 	}
 
 	void deviceHealthReceivedEv(const std::string &aName, RS::Health aHealth, uint16_t aFlags) override
@@ -181,10 +192,10 @@ public:
 	{
 		switch (aEv) {
 			case EventType::LampSetState:
-				hub.sendCmdToDevice("Lamp", 1, std::any_cast<bool>(aValue));
+				hub.sendCmdToDevice("Lamp", static_cast<uint8_t>(Commands::SetState), std::any_cast<bool>(aValue));
 				break;
 			case EventType::PumpSetState:
-				hub.sendCmdToDevice("Pump", 1, std::any_cast<bool>(aValue));
+				hub.sendCmdToDevice("Pump", static_cast<uint8_t>(Commands::SetState), std::any_cast<bool>(aValue));
 				break;
 			default:
 				break;

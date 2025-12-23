@@ -1,5 +1,4 @@
-#ifndef TIMEWRAPPER_HPP
-#define TIMEWRAPPER_HPP
+#pragma once
 
 #include <chrono>
 
@@ -26,5 +25,3 @@ public:
 			now.time_since_epoch());
 	}
 };
-
-#endif // TIMEWRAPPER_HPP

@@ -12,8 +12,7 @@
 #include <vector>
 #include <thread>
 
-enum class EventType {
-	Log,
+enum class EventType : uint64_t {
 	PumpSetState,
 	LampSetState,
 };
@@ -34,6 +33,11 @@ public:
 	{
 		thread = std::thread(&EventBus::threadFunction, this);
 		thread.detach();
+	}
+
+	void registerObserver(EventBusObserver *aObs)
+	{
+		observers.push_back(aObs);
 	}
 
 private:
