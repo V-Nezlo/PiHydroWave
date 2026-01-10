@@ -1,0 +1,244 @@
+<div class="page">
+  <header class="topbar">
+    <div>
+      <p class="kicker">Hydroponics</p>
+      <h1>
+        {{ viewMode() === 'dashboard' ? 'Панель управления установкой' : 'Настройки устройств' }}
+      </h1>
+    </div>
+    <div class="status-chip">
+      <span class="dot" [class.active]="isFlooding()"></span>
+      {{ system().plainType }}
+    </div>
+  </header>
+
+  <section class="main-grid" *ngIf="viewMode() === 'dashboard'">
+    <div class="widgets-grid">
+      <button
+        class="widget-card"
+        type="button"
+        *ngFor="let widget of widgets(); trackBy: trackById"
+        [ngClass]="statusClass(widget.status)"
+        (click)="openWidget(widget)"
+      >
+        <div class="widget-name">{{ widget.name }}</div>
+        <div class="widget-value">{{ formatValue(widget) }}</div>
+      </button>
+    </div>
+
+    <aside class="panel">
+      <div class="panel-card">
+        <div class="panel-title">Текущий режим</div>
+        <div class="panel-mode">{{ system().mode }}</div>
+        <div class="panel-meta">
+          <div>
+            <span class="label">До переключения</span>
+            <span class="value">{{ system().nextSwitchTime }}</span>
+          </div>
+          <div>
+            <span class="label">Состояние</span>
+            <span class="value">{{ system().plainType }}</span>
+          </div>
+          <div *ngIf="system().mode === 'SWING'">
+            <span class="label">Отработка качелей</span>
+            <span class="value">{{ system().swingState || '—' }}</span>
+          </div>
+        </div>
+
+        <div class="water-stage">
+          <div class="water-track" [class.flooding]="isFlooding()">
+            <div class="water-flow"></div>
+            <div class="water-flow secondary"></div>
+          </div>
+          <p class="water-caption">
+            {{ isFlooding() ? 'Затопление, поток вправо' : 'Осушение, воды нет' }}
+          </p>
+        </div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="settings-grid" *ngIf="viewMode() === 'settings'">
+    <aside class="settings-list">
+      <button
+        class="settings-device"
+        type="button"
+        *ngFor="let device of settingsDevices"
+        [class.active]="device.id === selectedDeviceId()"
+        (click)="selectDevice(device.id)"
+      >
+        <span class="device-name">{{ device.name }}</span>
+        <span class="device-id">{{ device.id }}</span>
+      </button>
+    </aside>
+
+    <div class="settings-panel">
+      <div class="settings-section">
+        <div class="settings-header">
+          <h2>Config</h2>
+          <p class="settings-help">Настраивается всегда</p>
+        </div>
+        <div class="settings-group" *ngIf="settingsEntries('config').length; else noConfig">
+          <div class="settings-row" *ngFor="let entry of settingsEntries('config')">
+            <div class="setting-label">
+              <span>{{ entry.label }}</span>
+              <span class="setting-key">{{ entry.key }}</span>
+            </div>
+            <div class="setting-control">
+              <ng-container [ngSwitch]="entry.type">
+                <label class="toggle" *ngSwitchCase="'bool'">
+                  <input
+                    type="checkbox"
+                    [checked]="entryDraftChecked(entry)"
+                    (change)="onEntryInput(entry, $event)"
+                  />
+                  <span>Вкл</span>
+                </label>
+                <input
+                  *ngSwitchCase="'number'"
+                  type="number"
+                  [value]="entryDraftValue(entry)"
+                  (input)="onEntryInput(entry, $event)"
+                />
+                <select *ngSwitchCase="'select'" [value]="entryDraftValue(entry)" (change)="onEntryInput(entry, $event)">
+                  <option value="" disabled>—</option>
+                  <option *ngFor="let option of entry.options" [value]="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+                <textarea
+                  *ngSwitchCase="'list'"
+                  rows="4"
+                  [value]="entryDraftValue(entry)"
+                  (input)="onEntryInput(entry, $event)"
+                ></textarea>
+              </ng-container>
+              <div class="setting-actions">
+                <button class="apply-btn" type="button" (click)="saveEntry(entry)">Сохранить</button>
+                <button class="ghost-btn" type="button" [disabled]="!entryDirtyState(entry)" (click)="resetEntry(entry)">
+                  Сбросить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ng-template #noConfig>
+          <div class="empty-state">Нет доступных настроек</div>
+        </ng-template>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-header">
+          <h2>Int</h2>
+          <p class="settings-help">
+            Доступно при обслуживании: {{ isMaintenanceEnabled() ? 'включено' : 'выключено' }}
+          </p>
+        </div>
+        <div class="settings-group" *ngIf="settingsEntries('int').length; else noInt">
+          <div
+            class="settings-row"
+            *ngFor="let entry of settingsEntries('int')"
+            [class.disabled]="entryDisabled(entry)"
+          >
+            <div class="setting-label">
+              <span>{{ entry.label }}</span>
+              <span class="setting-key">{{ entry.key }}</span>
+            </div>
+            <div class="setting-control">
+              <ng-container [ngSwitch]="entry.type">
+                <label class="toggle" *ngSwitchCase="'bool'">
+                  <input
+                    type="checkbox"
+                    [checked]="entryDraftChecked(entry)"
+                    [disabled]="entryDisabled(entry)"
+                    (change)="onEntryInput(entry, $event)"
+                  />
+                  <span>Вкл</span>
+                </label>
+                <input
+                  *ngSwitchCase="'number'"
+                  type="number"
+                  [disabled]="entryDisabled(entry)"
+                  [value]="entryDraftValue(entry)"
+                  (input)="onEntryInput(entry, $event)"
+                />
+                <select
+                  *ngSwitchCase="'select'"
+                  [disabled]="entryDisabled(entry)"
+                  [value]="entryDraftValue(entry)"
+                  (change)="onEntryInput(entry, $event)"
+                >
+                  <option value="" disabled>—</option>
+                  <option *ngFor="let option of entry.options" [value]="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+                <textarea
+                  *ngSwitchCase="'list'"
+                  rows="4"
+                  [disabled]="entryDisabled(entry)"
+                  [value]="entryDraftValue(entry)"
+                  (input)="onEntryInput(entry, $event)"
+                ></textarea>
+              </ng-container>
+              <div class="setting-actions">
+                <button
+                  class="apply-btn"
+                  type="button"
+                  [disabled]="entryDisabled(entry)"
+                  (click)="saveEntry(entry)"
+                >
+                  Сохранить
+                </button>
+                <button class="ghost-btn" type="button" [disabled]="!entryDirtyState(entry)" (click)="resetEntry(entry)">
+                  Сбросить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <ng-template #noInt>
+          <div class="empty-state">Нет внутренних параметров</div>
+        </ng-template>
+      </div>
+    </div>
+  </section>
+
+  <div class="ticker" #tickerContainer *ngIf="viewMode() === 'dashboard'">
+    <div class="ticker-track" #tickerTrack>
+      <span class="ticker-item" *ngFor="let item of tickerItems(); let last = last">
+        {{ item }}
+        <span class="ticker-sep" *ngIf="!last">•</span>
+      </span>
+    </div>
+  </div>
+
+  <footer class="bottom-bar">
+    <button
+      class="action-btn"
+      type="button"
+      (click)="viewMode() === 'dashboard' ? openSettings() : closeSettings()"
+    >
+      {{ viewMode() === 'dashboard' ? 'Настройки' : 'Назад' }}
+    </button>
+    <button class="action-btn ghost" type="button">Логи</button>
+  </footer>
+</div>
+
+<div class="modal-backdrop" *ngIf="selectedWidget() as widget" (click)="closeWidget()">
+  <div class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>{{ widget.name }}</h2>
+      <button class="icon-btn" type="button" (click)="closeWidget()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-value">{{ formatValue(widget) }}</div>
+      <div class="modal-status" [ngClass]="statusClass(widget.status)">
+        {{ statusLabel(widget.status) }}
+      </div>
+      <p class="modal-description">
+        {{ widget.statusStr }}
+      </p>
+    </div>
+  </div>
+</div>

@@ -2,122 +2,258 @@
 
 #include "core/InterfaceList.hpp"
 
-#include <asm-generic/errno.h>
-#include <cerrno>
-#include <fcntl.h>
-#include <optional>
-#include <sys/poll.h>
-#include <termios.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <poll.h>
-#include <cstring>
-#include <stdexcept>
 #include <string>
-#include <array>
-#include <cstdint>
+#include <cstring>
+#include <cerrno>
+#include <stdexcept>
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <termios.h>
+#include <poll.h>
+#include <sys/ioctl.h>
+#include <sys/stat.h>
 
 class SerialDriver : public AbstractSerial {
 public:
-	SerialDriver(std::string &aDevice, speed_t aBaud = B115200):
-		fd{-1}
+	explicit SerialDriver(const std::string& aDevice, speed_t aBaud = B115200)
+		: m_device(aDevice), m_baud(aBaud), fd(-1)
 	{
-		fd = open(aDevice.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+		open();
+	}
 
-		if (fd < 0) {
-			throw std::runtime_error("Failed to open serial port" + aDevice + ": " + strerror(errno));
+	~SerialDriver() override
+	{
+		close();
+	}
+
+	// Можно логировать снаружи, если open/ping вернули false.
+	const std::string& lastError() const { return m_lastError; }
+
+	bool open() override
+	{
+		if (fd >= 0) {
+			return true;
 		}
 
-		struct termios tty{};
-		if (tcgetattr(fd, &tty) != 0) {
-			throw std::runtime_error("tcgetattr() failed");
+		m_lastError.clear();
+
+		// Быстрая проверка наличия ноды (не обязательна, но помогает не спамить errno).
+		struct stat st {};
+		if (::stat(m_device.c_str(), &st) != 0) {
+			m_lastError = "Device node not found: " + m_device + " (" + std::string(::strerror(errno)) + ")";
+			return false;
 		}
 
-		cfmakeraw(&tty);
-		cfsetispeed(&tty, aBaud);
-		cfsetospeed(&tty, aBaud);
+		int newFd = ::open(m_device.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK);
+		if (newFd < 0) {
+			m_lastError = "Failed to open serial port " + m_device + ": " + std::string(::strerror(errno));
+			return false;
+		}
 
-		tty.c_cflag |= (CLOCAL | CREAD); // enable receiver, local mode
-		tty.c_cflag &= ~CRTSCTS;         // no hardware flow control
-		tty.c_cflag &= ~PARENB;          // no parity
-		tty.c_cflag &= ~CSTOPB;          // one stop bit
-		tty.c_cflag &= ~CSIZE;
-		tty.c_cflag |= CS8;              // 8 data bits
+		if (!configureTermios(newFd)) {
+			::close(newFd);
+			return false;
+		}
 
-		tty.c_cc[VMIN]  = 0;
-		tty.c_cc[VTIME] = 0;
+		fd = newFd;
+		return true;
+	}
 
-		if (tcsetattr(fd, TCSANOW, &tty) != 0) {
-			close(fd);
-			throw std::runtime_error("tcsetattr() failed");
+	void close() override
+	{
+		if (fd >= 0) {
+			::close(fd);
+			fd = -1;
 		}
 	}
 
-	~SerialDriver()
+	bool opened() const override
+	{
+		return fd >= 0;
+	}
+
+	bool ping() override
 	{
 		if (fd >= 0) {
-			close(fd);
+			// Быстрая проверка: не пришёл ли HUP/ERR/NVAL
+			struct pollfd pfd {};
+			pfd.fd = fd;
+			pfd.events = POLLIN;
+
+			int pr = ::poll(&pfd, 1, 0);
+			if (pr < 0) {
+				m_lastError = "poll() failed: " + std::string(::strerror(errno));
+				close();
+				return false;
+			}
+
+			if (pr > 0 && (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))) {
+				m_lastError = "Serial disconnected (poll revents=" + std::to_string(pfd.revents) + ")";
+				close();
+				return false;
+			}
+
+			struct termios tmp {};
+			if (::tcgetattr(fd, &tmp) != 0) {
+				if (isDisconnectErrno(errno)) {
+					m_lastError = "Serial disconnected (tcgetattr): " + std::string(::strerror(errno));
+					close();
+					return false;
+				}
+				m_lastError = "tcgetattr() failed: " + std::string(::strerror(errno));
+			}
+
+			return true;
 		}
+
+		return open();
 	}
 
 	size_t bytesAvaillable()
 	{
-		int count = 0;
-		if (ioctl(fd, FIONREAD, &count) < 0) {
+		if (fd < 0) {
 			return 0;
 		}
 
-		return static_cast<size_t>(count);
-	}
-
-	size_t read(void *aData, size_t aLen) override
-	{
-		ssize_t result = ::read(fd, aData, aLen);
-		if (result < 0) {
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				return 0;
+		int count = 0;
+		if (::ioctl(fd, FIONREAD, &count) < 0) {
+			if (isDisconnectErrno(errno)) {
+				m_lastError = "FIONREAD failed (disconnect): " + std::string(::strerror(errno));
+				close();
 			}
-
-			throw std::runtime_error("Serial read failed: " + std::string(strerror(errno)));
+			return 0;
 		}
 
-		return static_cast<size_t>(result);
+		return (count > 0) ? static_cast<size_t>(count) : 0u;
 	}
 
-	/// \brief Враппер должен уметь в микропротокол EspNowUSB
-	/// \param aData
-	/// \param aLength
-	/// \return
-	size_t write(const uint8_t *aData, size_t aLength) override
+	size_t read(void* aData, size_t aLen) override
 	{
-		if (fd < 0) {
-			throw std::runtime_error("Serial not open");
+		if (fd < 0 || aLen == 0) {
+			return 0;
+		}
+
+		ssize_t result = ::read(fd, aData, aLen);
+		if (result > 0) {
+			return static_cast<size_t>(result);
+		}
+
+		if (result == 0) {
+			return 0;
+		}
+
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			return 0;
+		}
+
+		if (isDisconnectErrno(errno)) {
+			m_lastError = "Serial read disconnect: " + std::string(::strerror(errno));
+			close();
+			return 0;
+		}
+
+		close();
+		return 0;
+	}
+
+	size_t write(const uint8_t* aData, size_t aLength) override
+	{
+		if (fd < 0 || aLength == 0) {
+			return 0;
 		}
 
 		ssize_t ret = ::write(fd, aData, aLength);
-
-		if (ret < 0) {
-			// Пока игнорируем, такое может случаться
+		if (ret >= 0) {
+			return static_cast<size_t>(ret);
 		}
 
-		return static_cast<size_t>(ret);
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			return 0;
+		}
+
+		if (isDisconnectErrno(errno)) {
+			m_lastError = "Serial write disconnect: " + std::string(::strerror(errno));
+			close();
+			return 0;
+		}
+
+		m_lastError = "Serial write failed: " + std::string(::strerror(errno));
+		return 0;
 	}
 
 	bool poll(int aTimeout = -1)
 	{
-		struct pollfd pfd{};
+		if (fd < 0) {
+			return false;
+		}
+
+		struct pollfd pfd {};
 		pfd.fd = fd;
 		pfd.events = POLLIN;
 
 		int ret = ::poll(&pfd, 1, aTimeout);
 		if (ret < 0) {
-			throw std::runtime_error("poll() failed: " + std::string(strerror(errno)));
+			if (isDisconnectErrno(errno)) {
+				m_lastError = "poll() disconnect: " + std::string(::strerror(errno));
+				close();
+				return false;
+			}
+			throw std::runtime_error("poll() failed: " + std::string(::strerror(errno)));
 		}
 
-		return ret > 0 && (pfd.revents & POLLIN);
+		if (ret == 0) {
+			return false; // timeout
+		}
+
+		if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+			m_lastError = "Serial disconnected (poll revents=" + std::to_string(pfd.revents) + ")";
+			close();
+			return false;
+		}
+
+		return (pfd.revents & POLLIN) != 0;
 	}
 
 private:
-	int fd;
-};
+	bool configureTermios(int aFd)
+	{
+		struct termios tty {};
+		if (::tcgetattr(aFd, &tty) != 0) {
+			m_lastError = "tcgetattr() failed: " + std::string(::strerror(errno));
+			return false;
+		}
 
+		::cfmakeraw(&tty);
+		::cfsetispeed(&tty, m_baud);
+		::cfsetospeed(&tty, m_baud);
+
+		tty.c_cflag |= (CLOCAL | CREAD);
+		tty.c_cflag &= ~CRTSCTS;
+		tty.c_cflag &= ~PARENB;
+		tty.c_cflag &= ~CSTOPB;
+		tty.c_cflag &= ~CSIZE;
+		tty.c_cflag |= CS8;
+
+		tty.c_cc[VMIN]  = 0;
+		tty.c_cc[VTIME] = 0;
+
+		if (::tcsetattr(aFd, TCSANOW, &tty) != 0) {
+			m_lastError = "tcsetattr() failed: " + std::string(::strerror(errno));
+			return false;
+		}
+
+		return true;
+	}
+
+	static bool isDisconnectErrno(int e)
+	{
+		return e == EIO || e == ENODEV || e == EBADF || e == EPIPE || e == ENXIO;
+	}
+
+private:
+	std::string m_device;
+	speed_t m_baud;
+	int fd;
+	std::string m_lastError;
+};

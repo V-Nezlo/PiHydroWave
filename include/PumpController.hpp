@@ -25,8 +25,8 @@ class PumpController : public AbstractEntryObserver {
 	using milliseconds = std::chrono::milliseconds;
 	using seconds = std::chrono::seconds;
 
-	enum class PlainType : uint8_t { Drainage, Irrigation };
-	enum class SwingState : uint8_t { SwingOn, SwingOff };
+	enum class PlainType { Drainage, Irrigation };
+	enum class SwingState { SwingOn, SwingOff };
 
 	std::shared_ptr<Blackboard> bb;
 	std::shared_ptr<EventBus> bus;
@@ -34,7 +34,6 @@ class PumpController : public AbstractEntryObserver {
 	MonitorEntry monitor;
 
 	BlackboardEntry<bool> enabled;
-	BlackboardEntry<bool> present;
 	BlackboardEntry<PumpModes> mode;
 	BlackboardEntry<bool> state;
 	BlackboardEntry<bool> desiredState;
@@ -47,14 +46,18 @@ class PumpController : public AbstractEntryObserver {
 	BlackboardEntry<PlainType> plainType;
 	BlackboardEntry<SwingState> swingState;
 	BlackboardEntry<bool> maintance;
-	BlackboardEntry<uint8_t> waterLevel;
-	BlackboardEntry<uint8_t> minWaterLevel;
+	BlackboardEntry<float> waterLevel;
+	BlackboardEntry<float> minWaterLevel;
+	BlackboardEntry<DeviceStatus> pumpStatus;
+	BlackboardEntry<DeviceStatus> upperStatus;
+	BlackboardEntry<seconds> nextSwitchTime;
 
 	std::chrono::milliseconds lastActionTime;
 	std::chrono::milliseconds lastSwingTime;
 	std::chrono::milliseconds waterFillingTimer;
 	std::chrono::milliseconds lastChecksTime;
 	std::chrono::milliseconds lastValidatorTime;
+	std::chrono::milliseconds lastTelemetryTime;
 
 	bool fillingCheckEn;
 	mutable std::mutex mutex;

@@ -15,10 +15,7 @@ public:
 	bool set(T aValue)
 	{
 		if constexpr (std::is_enum_v<T>) {
-			unsigned value = static_cast<unsigned>(aValue);
-			return bb->set(name, value);
-		} else if constexpr (std::is_same_v<T, std::chrono::milliseconds>) {
-			uint64_t value = aValue.count();
+			int value = static_cast<int>(aValue);
 			return bb->set(name, value);
 		} else {
 			return bb->set(name, aValue);
@@ -33,11 +30,8 @@ public:
 	T read() const
 	{
 		if constexpr (std::is_enum_v<T>) {
-			unsigned value = bb->get<unsigned>(name).value();
+			int value = bb->get<int>(name).value();
 			return static_cast<T>(value);
-		} else if constexpr (std::is_same_v<T, std::chrono::milliseconds>) {
-			uint64_t value = bb->get<uint64_t>(name).value();
-			return value;
 		} else {
 			return bb->get<T>(name).value();
 		}
@@ -51,6 +45,11 @@ public:
 	auto operator=(T aValue)
 	{
 		return set(aValue);
+	}
+
+	T operator()() const
+	{
+		return read();
 	}
 
 	std::string_view getName() const

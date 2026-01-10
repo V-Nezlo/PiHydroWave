@@ -3,6 +3,7 @@
 #include "core/Blackboard.hpp"
 
 #include <array>
+#include <chrono>
 #include <fstream>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -13,8 +14,8 @@
 
 using json = nlohmann::json;
 
-enum class SettingType { BOOL, INT, FLOAT, U64, UNSIGNED, STRING };
-using SettingValue = std::variant<bool, int, double, uint64_t, std::string>;
+enum class SettingType { BOOL, INT, FLOAT, STRING, SECONDS, MSECONDS};
+using SettingValue = std::variant<bool, int, float, std::string, std::chrono::seconds, std::chrono::milliseconds>;
 
 struct SettingDefinition {
 	std::string key;
@@ -50,6 +51,7 @@ private:
 
 	json generateSchema() const;
 	json getConfigForSaving() const;
+	void adjustTypes(std::unordered_map<std::string, SettingValue> &effective);
 
 	static std::string toString(SettingType type);
 

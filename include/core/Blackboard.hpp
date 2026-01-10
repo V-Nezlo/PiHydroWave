@@ -8,6 +8,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <algorithm>
 #include <vector>
 
 class AbstractEntryObserver {
@@ -89,6 +90,18 @@ public:
 			}
 		}
 		std::cerr << "Key " << key << " not found!" << std::endl;
+		return std::nullopt;
+	}
+
+	const std::optional<std::any> getAny(std::string_view key)
+	{
+		std::lock_guard lock(mutex);
+		std::string keyStr(key);
+		auto it = data.find(keyStr);
+		if (it != data.end()) {
+			return it->second;
+		}
+
 		return std::nullopt;
 	}
 
@@ -197,11 +210,12 @@ public:
 		std::vector<std::string> result;
 		std::string prefixStr(prefix);
 
-		for (const auto &[key, _] : data) {
-			if (key.find(prefixStr) == 0) {
-				result.push_back(key);
+		for (const auto &key : data) {
+			if (key.first.find(prefixStr) != std::string::npos) {
+				result.push_back(key.first);
 			}
 		}
+
 		return result;
 	}
 
@@ -214,6 +228,15 @@ public:
 			return it->second.type().name();
 		}
 		return "not_found";
+	}
+
+	void printAllKeys()
+	{
+		std::cout << "All BB keys:" << std::endl;
+		for (const auto &pos : data) {
+			std::cout << pos.first << std::endl;
+		}
+		std::cout << "BB keys end" << std::endl;
 	}
 
 private:
@@ -234,7 +257,7 @@ private:
 
 			// Копируем наблюдатели для префиксов
 			for (const auto &[prefix, observers] : prefixObservers) {
-				if (keyStr.find(prefix) == 0) {
+				if (keyStr.find(prefix) != std::string::npos) {
 					for (auto *observer : observers) {
 						prefixObserversCopy.emplace_back(prefix, observer);
 					}

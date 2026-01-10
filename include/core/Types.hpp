@@ -4,14 +4,23 @@
 #include <array>
 #include <cstdint>
 
-enum class PumpModes : uint8_t {
+enum class PumpModes {
 	EBBNormal,
 	EBBSwing,
 	Dripping,
 };
 
+// clang-format off
+enum class DeviceStatus {
+	NotFound    = 0,
+	Warning     = 1,
+	Working     = 2,
+	Error       = 3
+};
+// clang-format on
+
 namespace Log {
 
-enum class Level : unsigned { ERROR = 0, WARN = 1, INFO = 2, DEBUG = 3, TRACE = 4 };
+enum class Level {STATUS = 0, ERROR = 1, WARN = 2, INFO = 3, DEBUG = 4, TRACE = 5 };
 
 }

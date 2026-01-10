@@ -1,12 +1,15 @@
 #pragma once
 
+#include "BbNames.hpp"
 #include "core/Blackboard.hpp"
 #include "core/BlackboardEntry.hpp"
 #include "core/Helpers.hpp"
 #include "core/InterfaceList.hpp"
+#include "core/Types.hpp"
 
 //#include <EspNowUSBProto/Parser.hpp>
 #include "../lib/EspNowProto/include/EspNowUSBProto/Parser.hpp"
+#include "logger/Logger.hpp"
 
 #include <UtilitaryRS/Crc8.hpp>
 #include <UtilitaryRS/RsParser.hpp>
@@ -18,19 +21,10 @@
 #include <queue>
 #include <string>
 #include <thread>
-#include <tuple>
 #include <unordered_map>
 
 class SerialEspProxy : public AbstractSerial {
 	using Parser = RS::RsParser<64, Crc8>;
-
-	// clang-format off
-	enum class BridgeStatus {
-		Lost    = 0,
-		Ready   = 1,
-		Working = 2
-	};
-	// clang-format on
 
 	AbstractSerial *driver;
 	std::shared_ptr<Blackboard> bb;
@@ -41,7 +35,7 @@ class SerialEspProxy : public AbstractSerial {
 	std::chrono::time_point<std::chrono::steady_clock> lastMessageTimepoint;
 
 	std::thread thread;
-	BlackboardEntry<BridgeStatus> bridgeStatus;
+	BlackboardEntry<DeviceStatus> bridgeStatus;
 	std::unordered_map<std::string, std::vector<uint8_t>> uidMap;
 
 public:
@@ -53,10 +47,10 @@ public:
 		lastHeartbeatTime{std::chrono::milliseconds{0}},
 		lastMessageTimepoint{std::chrono::milliseconds{0}},
 		thread{},
-		bridgeStatus{"bridge.status", bb},
+		bridgeStatus{Names::kTelemBridgeStatus, bb},
 		uidMap{}
 	{
-		bridgeStatus.set(BridgeStatus::Lost);
+		bridgeStatus.set(DeviceStatus::NotFound);
 	}
 
 	void start()
@@ -217,29 +211,44 @@ private:
 		while (true) {
 			std::chrono::time_point<std::chrono::steady_clock> time = std::chrono::steady_clock::now();
 
-			switch (bridgeStatus.read()) {
-				case BridgeStatus::Lost: {
+			// Проверим состояние бриджа как serial устройства
+			const bool alive = driver->ping();
+
+			if (!alive) {
+				// bridgeStatus = DeviceStatus::NotFound;
+				HYDRO_LOG_ERROR("Bridge serial device not found!");
+				std::this_thread::sleep_for(std::chrono::seconds{2});
+			} else if (bridgeStatus() == DeviceStatus::NotFound) {
+				bridgeStatus = DeviceStatus::Error;
+			}
+
+			switch (bridgeStatus()) {
+				case DeviceStatus::NotFound :
+					// Ожидание serial устройства
+					break;
+
+				case DeviceStatus::Error: {
 					auto packet = createPingPacket();
 					driver->write(packet.data(), packet.size());
 					if (lastHeartbeatTime.time_since_epoch().count()
 						&& time - lastHeartbeatTime <= std::chrono::seconds{5}) {
-						bridgeStatus.set(BridgeStatus::Ready);
+						bridgeStatus.set(DeviceStatus::Warning);
 					}
 				} break;
-				case BridgeStatus::Ready: {
+			case DeviceStatus::Warning: {
 					auto packet = createPingPacket();
 					driver->write(packet.data(), packet.size());
 
 					if (time - lastMessageTimepoint <= std::chrono::seconds{5}) {
-						bridgeStatus.set(BridgeStatus::Working);
+						bridgeStatus.set(DeviceStatus::Working);
 					} else if (time - lastHeartbeatTime >= std::chrono::seconds{5}) {
-						bridgeStatus.set(BridgeStatus::Lost);
+						bridgeStatus.set(DeviceStatus::Error);
 					}
 				} break;
-				case BridgeStatus::Working:
+			case DeviceStatus::Working:
 					if (time - lastMessageTimepoint >= std::chrono::seconds{5}) {
 						lastHeartbeatTime = time;
-						bridgeStatus.set(BridgeStatus::Ready);
+						bridgeStatus.set(DeviceStatus::Warning);
 					}
 					break;
 			}
@@ -247,4 +256,11 @@ private:
 			std::this_thread::sleep_for(std::chrono::seconds{1});
 		}
 	}
+
+	// AbstractSerial interface
+public:
+	bool open() override { return true; }
+	void close() override {}
+	bool opened() const override { return true; }
+	bool ping() override { return true; }
 };

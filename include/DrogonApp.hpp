@@ -5,6 +5,7 @@
 #include "BackWebSocket.hpp"
 
 #include <drogon/HttpAppFramework.h>
+#include <functional>
 #include <thread>
 
 class DrogonApp {
@@ -22,6 +23,11 @@ public:
 		thread.detach();
 	}
 
+	void setTerminator(std::function<void()> aTerminator)
+	{
+		drogon::app().setTermSignalHandler(aTerminator).setIntSignalHandler(aTerminator);
+	}
+
 private:
 	std::thread thread;
 
@@ -31,7 +37,8 @@ private:
 		drogon::app()
 			.addListener("0.0.0.0", 8848)
 			.setThreadNum(1)
-			.setDocumentRoot("/etc/www/pihydro/browser")
+			// .setDocumentRoot("/etc/www/pihydro/browser")
+			.setDocumentRoot("/home/nikita/proj/PiHydroWave/frontend/HydroFrontend/dist/HydroFrontend/browser")
 			.registerController(rest)
 			.registerController(webSocket)
 			.run();

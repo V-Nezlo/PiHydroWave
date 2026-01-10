@@ -1,0 +1,214 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap");
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  background: #0a0f14;
+}
+
+button {
+  font: inherit;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.settings-device {
+  border: 1px solid rgba(80, 115, 124, 0.45);
+  background: rgba(10, 18, 24, 0.8);
+  color: inherit;
+  border-radius: 0.9rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border 0.2s ease, transform 0.2s ease;
+}
+
+.settings-device:hover {
+  transform: translateY(-2px);
+  border-color: rgba(120, 189, 179, 0.6);
+}
+
+.settings-device.active {
+  border-color: #3cf0c5;
+  box-shadow: 0 10px 20px rgba(2, 12, 12, 0.3);
+}
+
+.settings-device .device-name {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.settings-device .device-id {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(173, 201, 198, 0.6);
+  margin-top: 0.3rem;
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+}
+
+.settings-section {
+  border-radius: 1.2rem;
+  padding: 1.4rem;
+  background: rgba(9, 18, 22, 0.78);
+  border: 1px solid rgba(80, 115, 124, 0.45);
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.settings-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.settings-help {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(173, 201, 198, 0.65);
+}
+
+.settings-group {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 1.6fr);
+  gap: 1.2rem;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  background: rgba(8, 16, 20, 0.7);
+  border: 1px solid rgba(80, 115, 124, 0.35);
+}
+
+.settings-row.disabled {
+  opacity: 0.55;
+}
+
+.setting-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.setting-key {
+  font-size: 0.7rem;
+  color: rgba(173, 201, 198, 0.5);
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+}
+
+.setting-control {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.setting-control input,
+.setting-control select,
+.setting-control textarea {
+  width: 100%;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(80, 115, 124, 0.5);
+  background: rgba(7, 14, 18, 0.9);
+  color: inherit;
+  padding: 0.55rem 0.7rem;
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+}
+
+.setting-control textarea {
+  resize: vertical;
+}
+
+.setting-actions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.apply-btn,
+.ghost-btn {
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.apply-btn {
+  background: #2cd2aa;
+  color: #031116;
+}
+
+.ghost-btn {
+  background: transparent;
+  border: 1px solid rgba(72, 150, 137, 0.55);
+  color: #b9d3cc;
+}
+
+.ghost-btn:disabled,
+.apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.toggle input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.empty-state {
+  padding: 1rem;
+  border-radius: 0.8rem;
+  background: rgba(8, 16, 20, 0.6);
+  color: rgba(173, 201, 198, 0.6);
+  text-align: center;
+}
+
+@media (max-width: 1024px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-row {
+    grid-template-columns: 1fr;
+  }
+}

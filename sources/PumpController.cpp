@@ -7,6 +7,7 @@
 */
 
 #include "PumpController.hpp"
+#include "BbNames.hpp"
 #include "core/EventBus.hpp"
 #include "core/MonitorEntry.hpp"
 #include "core/Types.hpp"
@@ -14,50 +15,56 @@
 #include <any>
 #include <chrono>
 #include <mutex>
-#include <optional>
-#include <stdexcept>
 #include <string>
 #include <thread>
 
 PumpController::PumpController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aEvBus) :
 	bb{aBb},
 	bus{aEvBus},
-
 	monitor{aBb},
 
-	enabled{"config.pump.enabled", aBb},
-	present{"pump.present", aBb},
-	mode{"config.pump.mode", aBb},
-	state{"pump.state", aBb},
-	desiredState{"pump.desiredState", aBb},
-	pumpOnTime{"config.pump.onTime", aBb},
-	pumpOffTime{"config.pump.offTime", aBb},
-	upperState{"pump.upperState", aBb},
-	swingTime{"config.pump.swingTime", aBb},
-	validTime{"config.pump.validTime", aBb},
-	maxFloodTime{"config.pump.maxFloodTime", aBb},
-	plainType{"pump.plainType", aBb},
-	swingState{"pump.swingState", aBb},
-	maintance{"config.maintance", aBb},
-	waterLevel{"pump.waterLevel", aBb},
-	minWaterLevel{"config.pump.minWaterLevel", aBb},
+	enabled{Names::kPumpEnabled, aBb},
+	mode{Names::kPumpMode, aBb},
+	state{Names::getValueNameByDevice(Names::kPumpDev), aBb},
+	desiredState{Names::kPumpDesiredState, aBb},
+	pumpOnTime{Names::kPumpOnTime, aBb},
+	pumpOffTime{Names::kPumpOffTime, aBb},
+	upperState{Names::getValueNameByDevice(Names::kUpperLevelDev), aBb},
+	swingTime{Names::kPumpSwingTime, aBb},
+	validTime{Names::kPumpValidTime, aBb},
+	maxFloodTime{Names::kPumpMaxFloodTime, aBb},
+	plainType{Names::kPumpPlainType, aBb},
+	swingState{Names::kPumpSwingState, aBb},
+	maintance{Names::kSystemMaintance, aBb},
+	waterLevel{Names::getValueNameByDevice(Names::kWaterLevelDev), aBb},
+	minWaterLevel{Names::kWaterLevelMinLevel, aBb},
+	pumpStatus{Names::getStatusNameByDevice(Names::kPumpDev), aBb},
+	upperStatus{Names::getStatusNameByDevice(Names::kUpperLevelDev), aBb},
+	nextSwitchTime{Names::kPumpNextSwitchTime, aBb},
 
 	lastActionTime{0},
 	lastSwingTime{0},
 	waterFillingTimer{0},
 	lastChecksTime{0},
 	lastValidatorTime{0},
+	lastTelemetryTime{0},
 	fillingCheckEn{false},
 
 	startedFlag{false}
 {
-
+	mode.subscribe(this);
+	upperStatus.subscribe(this);
+	nextSwitchTime = std::chrono::seconds{1};
+	swingState = SwingState::SwingOff;
+	desiredState = false;
+	plainType = PlainType::Drainage;
 }
 
 bool PumpController::ready() const
 {
+	// Проверки на наличие "живых" подписок
 	const bool enabledB = enabled.present();
-	const bool presentB = present.present();
+	const bool statusB = pumpStatus.present();
 	const bool modeB = mode.present();
 	const bool stateB = state.present();
 	const bool desiredStateB = desiredState.present();
@@ -70,9 +77,16 @@ bool PumpController::ready() const
 	const bool plainTypeB = plainType.present();
 	const bool swingStateB = swingState.present();
 	const bool maintanceB = maintance.present();
+	// Доп проверка на состояние насоса
+	bool pumpFound = false;
+	if (statusB) {
+		if (pumpStatus() != DeviceStatus::NotFound) {
+			pumpFound = true;
+		}
+	}
 
 	// Провалидирую все требуемые настройки
-	if (enabledB && presentB && modeB && stateB && desiredStateB && pumpOnTimeB && pumpOffTimeB && upperStateB && swingTimeB && validTimeB && maxFloodTimeB && plainTypeB && swingStateB && maintanceB) {
+	if (enabledB && statusB && modeB && stateB && desiredStateB && pumpOnTimeB && pumpOffTimeB && upperStateB && swingTimeB && validTimeB && maxFloodTimeB && plainTypeB && swingStateB && maintanceB && pumpFound) {
 		HYDRO_LOG_INFO("Pump Controller ready!");
 		return true;
 	} else {
@@ -84,7 +98,6 @@ bool PumpController::ready() const
 void PumpController::start()
 {
 	startedFlag = true;
-	mode.subscribe(this);
 	thread = std::thread(&PumpController::process, this);
 	thread.detach();
 
@@ -96,11 +109,19 @@ bool PumpController::isStarted() const
 	return startedFlag;
 }
 
-void PumpController::onEntryUpdated(std::string_view entry, const std::any &value)
+void PumpController::onEntryUpdated(std::string_view entry, const std::any &)
 {
 	if (entry == mode.getName()) {
 		std::lock_guard lock(mutex);
-		updateMode(std::any_cast<PumpModes>(value));
+		updateMode(mode());
+	} else if (entry == upperStatus.getName()) {
+		if (upperStatus() != DeviceStatus::NotFound) {
+			monitor.clearFlag(MonitorFlags::NoUpperForSwing);
+		}
+	} else if (entry == pumpStatus.getName()) {
+		if (pumpStatus() != DeviceStatus::NotFound) {
+			monitor.clearFlag(MonitorFlags::PumpControllerLost);
+		}
 	}
 }
 
@@ -110,46 +131,59 @@ void PumpController::process()
 		auto now = std::chrono::steady_clock::now();
 		std::chrono::milliseconds time = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
 
-		if (maintance.read()) {
+		if (maintance()) {
 			std::this_thread::sleep_for(std::chrono::milliseconds{1000});
 			continue;
 		}
 
 		std::lock_guard lock(mutex);
-		// Если ловера нет - то и управлять нечем
-		if (present.read()) {
-			switch (mode.read()) {
-				case PumpModes::EBBNormal:
-					processEBBNormalMode(time);
-					break;
-				case PumpModes::EBBSwing:
-					processEBBSwingMode(time);
-					break;
-				case PumpModes::Dripping:
-					processDripMode(time);
-					break;
-				default:
-					break;
-			}
-			// Обработка требуемого состояния насоса
-			if (time > lastValidatorTime + validTime.read()) {
-				lastValidatorTime = time;
 
-				if (state.read() != desiredState.read()) {
-					bus->sendEvent(EventType::PumpSetState, desiredState.read());
-				}
+		if (pumpStatus() == DeviceStatus::NotFound) {
+			if (enabled()) {
+				monitor.setFlag(MonitorFlags::PumpControllerLost);
 			}
-			// Если ловера нет но мы пытаемся им управлять - ставим ошибку
-		} else if (enabled.read() && !present.read()) {
-			monitor.setFlag(MonitorFlags::ControllerLost);
-		} else {
-			if (desiredState.read()) {
-				bus->sendEvent(EventType::PumpSetState, false);
+
+			std::this_thread::sleep_for(std::chrono::milliseconds{1000});
+			startedFlag = false;
+			break;
+		}
+
+		switch (mode()) {
+			case PumpModes::EBBNormal:
+				processEBBNormalMode(time);
+				break;
+			case PumpModes::EBBSwing:
+				processEBBSwingMode(time);
+				break;
+			case PumpModes::Dripping:
+				processDripMode(time);
+				break;
+			default:
+				break;
+		}
+
+		// Вывод доп информации
+		if (time > lastTelemetryTime + std::chrono::milliseconds{200}) {
+			lastTelemetryTime = time;
+
+			const milliseconds elapsed = time - lastActionTime;
+			const milliseconds actionTime = plainType() == PlainType::Irrigation ? pumpOnTime() : pumpOffTime();
+			nextSwitchTime = std::chrono::duration_cast<seconds>(actionTime - elapsed);
+		}
+
+		// Обработка требуемого состояния насоса
+		if (time > lastValidatorTime + validTime()) {
+			lastValidatorTime = time;
+
+			if (state() != desiredState()) {
+				bus->sendEvent(EventType::PumpSetState, desiredState());
 			}
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds{200});
 	}
+
+	HYDRO_LOG_ERROR("Pump controller stopped due an error!");
 }
 
 void PumpController::updateMode(PumpModes)
@@ -163,23 +197,23 @@ void PumpController::updateMode(PumpModes)
 
 bool PumpController::permitForAction() const
 {
-	return present.read() && waterLevel.read() > minWaterLevel.read();
+	return waterLevel() > minWaterLevel();
 }
 
 /// @brief EBB режим, вкл выкл насоса по времени
 void PumpController::processEBBNormalMode(std::chrono::milliseconds aCurrentTime)
 {
-	switch (plainType.read()) {
+	switch (plainType()) {
 		case PlainType::Irrigation:
 		// Если насос сейчас включен - смотрим, не пора ли выключать
-			if (aCurrentTime > lastActionTime + pumpOnTime.read()) {
+			if (aCurrentTime > lastActionTime + pumpOnTime()) {
 				lastActionTime = aCurrentTime;
 				desiredState = false;
 				plainType = PlainType::Drainage;
 			}
 			break;
 		case PlainType::Drainage:
-			if (aCurrentTime > lastActionTime + pumpOffTime.read()) {
+			if (aCurrentTime > lastActionTime + pumpOffTime()) {
 				lastActionTime = aCurrentTime;
 				if (permitForAction()) {
 					desiredState = true;
@@ -196,10 +230,10 @@ void PumpController::processEBBNormalMode(std::chrono::milliseconds aCurrentTime
 /// @brief Расширенный EBB режим, вкл выкл насоса по времени и отработка "качелей"
 void PumpController::processEBBSwingMode(std::chrono::milliseconds aCurrentTime)
 {
-	switch (plainType.read()) {
+	switch (plainType()) {
 		case PlainType::Irrigation:
 			// Если насос сейчас включен - смотрим, не пора ли выключать
-			if (aCurrentTime > lastActionTime + pumpOnTime.read()) {
+			if (aCurrentTime > lastActionTime + pumpOnTime()) {
 				lastActionTime = aCurrentTime;
 				desiredState = false;
 				plainType = PlainType::Drainage;
@@ -219,13 +253,20 @@ void PumpController::processEBBSwingMode(std::chrono::milliseconds aCurrentTime)
 					fillingCheckEn = false;
 					return;
 				}
+				if (upperStatus() == DeviceStatus::NotFound) {
+					desiredState = false;
+					plainType = PlainType::Drainage;
+					monitor.setFlag(MonitorFlags::NoUpperForSwing);
+					fillingCheckEn = false;
+					return;
+				}
 
 				// Обработка свинга
-				if (swingState.read() == SwingState::SwingOff
-					&& aCurrentTime > lastSwingTime + swingTime.read()) {
+				if (swingState() == SwingState::SwingOff
+					&& aCurrentTime > lastSwingTime + swingTime()) {
 					desiredState = true;
 					swingState = SwingState::SwingOn;
-				} else if (swingState.read() == SwingState::SwingOn && upperState.read()) {
+				} else if (swingState() == SwingState::SwingOn && upperState()) {
 					desiredState = false;
 					swingState = SwingState::SwingOff;
 					lastSwingTime = aCurrentTime;
@@ -236,7 +277,7 @@ void PumpController::processEBBSwingMode(std::chrono::milliseconds aCurrentTime)
 			break;
 
 		case PlainType::Drainage:
-			if (aCurrentTime > lastActionTime + pumpOffTime.read()) {
+			if (aCurrentTime > lastActionTime + pumpOffTime()) {
 				lastActionTime = aCurrentTime;
 				if (permitForAction()) {
 					desiredState = true;
@@ -245,7 +286,7 @@ void PumpController::processEBBSwingMode(std::chrono::milliseconds aCurrentTime)
 					swingState = SwingState::SwingOn;
 
 					// Проверим время заполнения бака один раз после осушения
-					waterFillingTimer = aCurrentTime + maxFloodTime.read();
+					waterFillingTimer = aCurrentTime + maxFloodTime();
 					fillingCheckEn = true;
 				} else {
 					monitor.setFlag(MonitorFlags::PumpNotOperate);
@@ -258,17 +299,17 @@ void PumpController::processEBBSwingMode(std::chrono::milliseconds aCurrentTime)
 /// @brief Самый простой режим, просто вкл-выкл насоса по времени
 void PumpController::processDripMode(std::chrono::milliseconds aCurrentTime)
 {
-	switch (plainType.read()) {
+	switch (plainType()) {
 		case PlainType::Irrigation:
 		// Если насос сейчас включен - смотрим, не пора ли выключать
-			if (aCurrentTime > lastActionTime + pumpOnTime.read()) {
+			if (aCurrentTime > lastActionTime + pumpOnTime()) {
 				lastActionTime = aCurrentTime;
 				desiredState = false;
 				plainType = PlainType::Drainage;
 			}
 			break;
 		case PlainType::Drainage:
-			if (aCurrentTime > lastActionTime + pumpOffTime.read()) {
+			if (aCurrentTime > lastActionTime + pumpOffTime()) {
 				lastActionTime = aCurrentTime;
 				if (permitForAction()) {
 					desiredState = true;

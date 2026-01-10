@@ -15,6 +15,7 @@ public:
 
 } // namespace Log
 
+#define HYDRO_LOG_STATUS(msg)  Log::Logger::log(Log::Level::STATUS, (msg))
 #define HYDRO_LOG_ERROR(msg) Log::Logger::log(Log::Level::ERROR, (msg))
 #define HYDRO_LOG_WARN(msg) Log::Logger::log(Log::Level::WARN, (msg))
 #define HYDRO_LOG_INFO(msg) Log::Logger::log(Log::Level::INFO, (msg))

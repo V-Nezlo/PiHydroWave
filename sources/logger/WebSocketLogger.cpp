@@ -12,6 +12,10 @@ void WebSocketLogger::registerSocket(std::shared_ptr<BackWebSocket> aSocket)
 
 void WebSocketLogger::log(Level aLevel, std::string &msg)
 {
+	if (level < aLevel ) {
+		return;
+	}
+
 	socket->log(aLevel, msg);
 }
 

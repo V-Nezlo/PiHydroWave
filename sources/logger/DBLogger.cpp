@@ -9,6 +9,10 @@ bool DBLogger::ready()
 
 void DBLogger::log(Level aLevel, std::string &msg)
 {
+	if (level < aLevel ) {
+		return;
+	}
+
 	if (db) {
 		db->insertText(static_cast<unsigned>(aLevel), msg);
 	}

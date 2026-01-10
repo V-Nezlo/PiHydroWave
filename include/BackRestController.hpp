@@ -1,5 +1,7 @@
 #pragma once
 
+#include "logger/Logger.hpp"
+#include <chrono>
 #include <core/Blackboard.hpp>
 #include <core/EventBus.hpp>
 
@@ -38,41 +40,44 @@ public:
 		if (!query.empty()) {
 			std::istringstream iss(query);
 			std::string key;
+
 			while (std::getline(iss, key, '+')) {
 				if (!bb->has(key)) {
+					HYDRO_LOG_ERROR("Rest: getValue: BB has not key: " + key);
 					result[key] = Json::nullValue;
 					continue;
 				}
 
 				if (bb->isType<bool>(key)) {
-					if (auto v = bb->get<bool>(key))
-						result[key] = *v;
-					else
-						result[key] = Json::nullValue;
+					if (auto v = bb->get<bool>(key)) result[key] = v.value();
+
+				} else if (bb->isType<unsigned>(key)) {
+					if (auto v = bb->get<unsigned>(key)) result[key] = v.value();
+
 				} else if (bb->isType<int>(key)) {
-					if (auto v = bb->get<int>(key))
-						result[key] = *v;
-					else
-						result[key] = Json::nullValue;
-				} else if (bb->isType<uint64_t>(key)) {
-					if (auto v = bb->get<uint64_t>(key))
-						result[key] = *v;
-					else
-						result[key] = Json::nullValue;
-				} else if (bb->isType<double>(key)) {
-					if (auto v = bb->get<double>(key))
-						result[key] = *v;
-					else
-						result[key] = Json::nullValue;
+					if (auto v = bb->get<int>(key)) {
+						result[key] = v.value();
+						int i = v.value();
+						int a = v.value();
+					}
+
+				} else if (bb->isType<float>(key)) {
+					if (auto v = bb->get<unsigned>(key)) result[key] = v.value();
+
 				} else if (bb->isType<std::string>(key)) {
-					if (auto v = bb->get<std::string>(key))
-						result[key] = *v;
-					else
-						result[key] = Json::nullValue;
+					if (auto v = bb->get<std::string>(key)) result[key] = v.value();
+
+				} else if (bb->isType<std::chrono::milliseconds>(key)) {
+					if (auto v = bb->get<std::chrono::milliseconds>(key)) result[key] = static_cast<unsigned>(v.value().count());
+
+				} else if (bb->isType<std::chrono::seconds>(key)) {
+					if (auto v = bb->get<std::chrono::seconds>(key)) result[key] = static_cast<unsigned>(v.value().count());
+
 				} else {
-					// Неизвестный/сложный тип — возвращаем строковое представление типа
 					result[key] = bb->getTypeName(key);
+					// result[key] = static_cast<int>(1);
 				}
+
 			}
 		}
 
@@ -109,17 +114,33 @@ public:
 		for (const auto &name : input.getMemberNames()) {
 			const Json::Value &val = input[name];
 
-			if (val.isBool()) {
-				bb->set<bool>(name, val.asBool());
+			if (bb->has(name)) {
 
-			} else if (val.isInt()) {
-				bb->set<int>(name, val.asInt());
+				// Будем писать в BB по тому типу что даст BB
+				if (bb->isType<bool>(name)) {
+					bb->set<bool>(name, val.asBool());
 
-			} else if (val.isDouble()) {
-				bb->set<double>(name, val.asDouble());
+				} else if (bb->isType<unsigned>(name)) {
+					bb->set<unsigned>(name, val.asUInt());
 
-			} else if (val.isUInt64()) {
-				bb->set<uint64_t>(name, val.asUInt64());
+				} else if (bb->isType<int>(name)) {
+					bb->set<int>(name, val.asInt());
+
+				} else if (bb->isType<float>(name)) {
+					bb->set<float>(name, val.asFloat());
+
+				} else if (bb->isType<std::string>(name)) {
+					bb->set<std::string>(name, val.asString());
+
+				} else if (bb->isType<std::chrono::seconds>(name)) {
+					bb->set<std::chrono::seconds>(name, std::chrono::seconds{val.asUInt()});
+
+				} else if (bb->isType<std::chrono::milliseconds>(name)) {
+					bb->set<std::chrono::milliseconds>(name, std::chrono::milliseconds{val.asUInt()});
+
+				} else {
+					HYDRO_LOG_ERROR("Rest: setValue : unsupported type");
+				}
 			}
 		}
 

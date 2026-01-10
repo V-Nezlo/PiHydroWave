@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <type_traits>
 
 namespace Helpers {
 
@@ -53,6 +54,8 @@ static inline bool unpackMac(const std::string &aStr, std::array<uint8_t, 6> &ou
 static inline std::string getLogLevelName(Log::Level aLevel)
 {
 	switch(aLevel) {
+		case Log::Level::STATUS:
+			return "Status";
 		case Log::Level::DEBUG:
 			return "Debug";
 		case Log::Level::ERROR:
@@ -68,5 +71,12 @@ static inline std::string getLogLevelName(Log::Level aLevel)
 	}
 }
 
+template<typename T>
+static constexpr uint8_t asU8(T aValue)
+{
+	// Чтобы неповадно было
+	static_assert(std::is_same_v<std::underlying_type_t<T>, uint8_t>);
+	return static_cast<uint8_t>(aValue);
+}
 
 } // namespace Helpers

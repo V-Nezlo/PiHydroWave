@@ -6,7 +6,9 @@
 @version 1.0
 */
 
+#include "BbNames.hpp"
 #include "LampController.hpp"
+#include "core/Types.hpp"
 #include "logger/Logger.hpp"
 #include <any>
 #include <chrono>
@@ -19,11 +21,12 @@ LampController::LampController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<
 	bb{aBb},
 	bus{aEvBus},
 
-	enabled{"config.lamp.enabled", aBb},
-	state{"lamp.state", aBb},
-	onTime{"config.lamp.onTime", aBb},
-	offTime{"config.lamp.offTime", aBb},
-	maintance{"config.maintance", aBb},
+	enabled{Names::kLampEnabled, aBb},
+	state{Names::getValueNameByDevice(Names::kLampDev), aBb},
+	onTime{Names::kLampOnTime, aBb},
+	offTime{Names::kLampOffTime, aBb},
+	maintance{Names::kSystemMaintance, aBb},
+	status{Names::getStatusNameByDevice(Names::kLampDev), aBb},
 	monitor{aBb},
 
 	lastCheckTime{0},
@@ -35,13 +38,22 @@ LampController::LampController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<
 
 bool LampController::ready() const
 {
+	// Проверки на наличие "живых" подписок
 	const auto enabledB = enabled.present();
+	const auto statusB = status.present();
 	const auto stateB = state.present();
 	const auto onTimeB = onTime.present();
 	const auto offTimeB = offTime.present();
 	const auto maintanceB = maintance.present();
 
-	if (enabledB && stateB && onTimeB && offTimeB && maintanceB) {
+	bool lampFound = false;
+	if (statusB) {
+		if (status() != DeviceStatus::NotFound) {
+			lampFound = true;
+		}
+	}
+
+	if (enabledB && stateB && onTimeB && offTimeB && maintanceB && statusB && lampFound) {
 		HYDRO_LOG_INFO("Lamp Controller ready!");
 		return true;
 	} else {
@@ -62,18 +74,40 @@ bool LampController::isStarted() const
 	return started;
 }
 
+void LampController::onEntryUpdated(std::string_view entry, const std::any &)
+{
+	if (entry == status.getName()) {
+		if (status() != DeviceStatus::NotFound) {
+			monitor.clearFlag(MonitorFlags::LampControllerLost);
+		}
+	}
+}
+
 void LampController::process()
 {
 	while(started) {
 		const bool desiredLampState = isTimeForLampActive();
-		const bool currentState = state.read();
 
-		if (currentState != desiredLampState) {
+		if (maintance()) {
+			std::this_thread::sleep_for(std::chrono::seconds{1});
+			continue;
+		}
+
+		// Выключение потока
+		if (status() == DeviceStatus::NotFound) {
+			monitor.setFlag(MonitorFlags::LampControllerLost);
+			started = false;
+			break;
+		}
+
+		if (state() != desiredLampState) {
 			sendCommand(desiredLampState);
 		}
 
-		std::this_thread::sleep_for(std::chrono::seconds{30});
+		std::this_thread::sleep_for(std::chrono::seconds{10});
 	}
+
+	HYDRO_LOG_ERROR("Lamp controller stopped by error!");
 }
 
 void LampController::sendCommand(bool aNewLampState)
@@ -90,12 +124,14 @@ bool LampController::isTimeForLampActive()
 	tm local{};
 	local = *std::localtime(&tt);
 
-	uint32_t minutes = static_cast<uint32_t>(local.tm_hour * 60 + local.tm_min);
+	const uint32_t minutes = static_cast<uint32_t>(local.tm_hour * 60 + local.tm_min);
+	const uint32_t onTimeMin = onTime();
+	const uint32_t offTimeMin = offTime();
 
-	if (onTime.read() <= offTime.read()) {
-		return minutes >= onTime.read() && minutes < offTime.read();
+	if (onTimeMin <= offTimeMin) {
+		return minutes >= onTimeMin && minutes < offTimeMin;
 	} else {
-		return minutes >= onTime.read() || minutes < offTime.read();
+		return minutes >= onTimeMin || minutes < offTimeMin;
 	}
 }
 

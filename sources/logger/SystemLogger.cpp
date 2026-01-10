@@ -23,9 +23,9 @@ bool SystemLogger::enabled(Level lvl)
 
 void SystemLogger::log(Level aLevel, const std::string &msg)
 {
-
-	if (!enabled(aLevel))
+	if (!enabled(aLevel)) {
 		return;
+	}
 
 	std::lock_guard<std::mutex> lock(logMutex);
 

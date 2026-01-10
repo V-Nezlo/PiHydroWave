@@ -10,13 +10,14 @@
 #define INCLUDE_LIGHTCONTROLLER_HPP_
 
 #include "core/MonitorEntry.hpp"
+#include "core/Types.hpp"
 #include <core/Blackboard.hpp>
 #include <core/BlackboardEntry.hpp>
 #include <core/EventBus.hpp>
 #include <memory>
 #include <thread>
 
-class LampController {
+class LampController : public AbstractEntryObserver {
 public:
 	LampController(std::shared_ptr<Blackboard> aBb, std::shared_ptr<EventBus> aEvBus);
 	bool ready() const;
@@ -24,15 +25,19 @@ public:
 	void start();
 	bool isStarted() const;
 
+	// AbstractEntryObserver interface
+	void onEntryUpdated(std::string_view entry, const std::any &value);
+
 private:
 	std::shared_ptr<Blackboard> bb;
 	std::shared_ptr<EventBus> bus;
 
 	BlackboardEntry<bool> enabled;
 	BlackboardEntry<bool> state;
-	BlackboardEntry<uint32_t> onTime;
-	BlackboardEntry<uint32_t> offTime;
+	BlackboardEntry<int> onTime;
+	BlackboardEntry<int> offTime;
 	BlackboardEntry<bool> maintance;
+	BlackboardEntry<DeviceStatus> status;
 	MonitorEntry monitor;
 
 	std::chrono::milliseconds lastCheckTime;
