@@ -101,8 +101,12 @@
                   (input)="onEntryInput(entry, $event)"
                 />
                 <select *ngSwitchCase="'select'" [value]="entryDraftValue(entry)" (change)="onEntryInput(entry, $event)">
-                  <option value="" disabled>—</option>
-                  <option *ngFor="let option of entry.options" [value]="option.value">
+                  <option value="" disabled [selected]="entryDraftValue(entry) === ''">—</option>
+                  <option
+                    *ngFor="let option of entry.options"
+                    [value]="option.value"
+                    [selected]="entryDraftValue(entry) === option.value.toString()"
+                  >
                     {{ option.label }}
                   </option>
                 </select>
@@ -168,8 +172,12 @@
                   [value]="entryDraftValue(entry)"
                   (change)="onEntryInput(entry, $event)"
                 >
-                  <option value="" disabled>—</option>
-                  <option *ngFor="let option of entry.options" [value]="option.value">
+                  <option value="" disabled [selected]="entryDraftValue(entry) === ''">—</option>
+                  <option
+                    *ngFor="let option of entry.options"
+                    [value]="option.value"
+                    [selected]="entryDraftValue(entry) === option.value.toString()"
+                  >
                     {{ option.label }}
                   </option>
                 </select>

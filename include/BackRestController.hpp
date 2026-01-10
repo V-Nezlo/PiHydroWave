@@ -55,11 +55,7 @@ public:
 					if (auto v = bb->get<unsigned>(key)) result[key] = v.value();
 
 				} else if (bb->isType<int>(key)) {
-					if (auto v = bb->get<int>(key)) {
-						result[key] = v.value();
-						int i = v.value();
-						int a = v.value();
-					}
+					if (auto v = bb->get<int>(key)) result[key] = v.value();
 
 				} else if (bb->isType<float>(key)) {
 					if (auto v = bb->get<unsigned>(key)) result[key] = v.value();
@@ -81,7 +77,10 @@ public:
 			}
 		}
 
-		auto resp = HttpResponse::newHttpJsonResponse(result);
+		auto resp = drogon::HttpResponse::newHttpResponse();
+		resp->setStatusCode(drogon::k200OK);
+		resp->setContentTypeCode(drogon::CT_APPLICATION_JSON);
+		resp->setBody(result.toStyledString());
 		callback(resp);
 	}
 
