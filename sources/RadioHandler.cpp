@@ -34,7 +34,8 @@ void RadioHandler::receiveThread()
 	uint8_t buffer[64];
 
 	while (true) {
-		if (!driver.poll(50)) {
+		if (!driver.poll()) {
+			std::this_thread::sleep_for(std::chrono::milliseconds{1000});
 			continue;
 		}
 

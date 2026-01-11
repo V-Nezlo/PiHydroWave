@@ -1,5 +1,6 @@
 #pragma once
 
+#include "logger/Logger.hpp"
 #include <any>
 #include <functional>
 #include <iostream>
@@ -10,6 +11,45 @@
 #include <unordered_map>
 #include <algorithm>
 #include <vector>
+
+struct StrHash {
+  using is_transparent = void;
+
+  size_t operator()(std::string_view s) const noexcept {
+	return std::hash<std::string_view>{}(s);
+  }
+  size_t operator()(const std::string& s) const noexcept {
+	return (*this)(std::string_view{s});
+  }
+  size_t operator()(const char* s) const noexcept {
+	return (*this)(std::string_view{s});
+  }
+};
+
+struct StrEq {
+  using is_transparent = void;
+
+  bool operator()(const std::string& a, const std::string& b) const noexcept {
+	return a == b;
+  }
+
+  bool operator()(std::string_view a, std::string_view b) const noexcept {
+	return a == b;
+  }
+  bool operator()(const std::string& a, std::string_view b) const noexcept {
+	return std::string_view{a} == b;
+  }
+  bool operator()(std::string_view a, const std::string& b) const noexcept {
+	return a == std::string_view{b};
+  }
+  bool operator()(const char* a, std::string_view b) const noexcept {
+	return std::string_view{a} == b;
+  }
+  bool operator()(std::string_view a, const char* b) const noexcept {
+	return a == std::string_view{b};
+  }
+};
+
 
 class AbstractEntryObserver {
 public:
@@ -25,63 +65,68 @@ public:
 
 class Blackboard {
 private:
-	std::unordered_map<std::string, std::any> data;
+	std::unordered_map<std::string, std::any, StrHash, StrEq> data;
 	mutable std::recursive_mutex mutex;
 
-	std::unordered_map<std::string, std::vector<AbstractEntryObserver *>> keyObservers;
-	std::unordered_map<std::string, std::vector<AbstractPrefixObserver *>> prefixObservers;
+	std::unordered_map<std::string_view, std::vector<AbstractEntryObserver *>> keyObservers;
+	std::unordered_map<std::string_view, std::vector<AbstractPrefixObserver *>> prefixObservers;
 
 public:
 	template<typename T>
-	bool set(std::string_view key, T &&value)
+	bool set(std::string_view key, T&& value)
 	{
-		using ValueType = std::decay_t<T>;
+		using V = std::decay_t<T>;
+
 		bool changed = false;
+
+		std::string_view key_copy;
+		std::any value_copy;
 		{
 			std::lock_guard lock(mutex);
-			std::string keyStr(key);
+			auto it = data.find(key);
 
-			auto it = data.find(keyStr);
-			if (it != data.end()) {
-				// Сравниваем только тип, не значение (убираем проблему с оператором ==)
-				if (it->second.type() != typeid(ValueType)) {
-					// Тип изменился - считаем что значение изменилось
-					it->second = std::forward<T>(value);
-					changed = true;
-				} else {
-					// Тип тот же - сохраняем старое поведение с == если возможно
-					if constexpr (requires { std::declval<ValueType>() == std::declval<ValueType>(); }) {
-						if (auto *oldVal = std::any_cast<ValueType>(&it->second)) {
-							if (*oldVal != value) {
-								it->second = std::forward<T>(value);
-								changed = true;
-							}
+			// Если ключа нет - аллоцируем строку, кладем внутрь
+			if (it == data.end()) {
+				auto result = data.try_emplace(std::string(key), std::any(std::forward<T>(value)));
+				it = result.first;
+				changed = true;
+			// Если ключ есть - проверим, есть ли смысл вызывать обсерверы
+			} else {
+
+				if (auto* old = std::any_cast<V>(&it->second)) {
+					// Если оператор сравнения есть - сравниваем
+					if constexpr (requires (const V& a, const V& b) { a == b; }) {
+						if (*old != value) {
+							it->second = std::any(std::forward<T>(value));
+							changed = true;
 						}
+					// Если нет - считаем измененным
 					} else {
-						// Для типов без оператора == всегда считаем измененным
-						it->second = std::forward<T>(value);
+						it->second = std::any(std::forward<T>(value));
 						changed = true;
 					}
+				} else {
+					HYDRO_LOG_ERROR("Key" + std::string(key) + "trying to change his type, daga kotowaru!");
 				}
-			} else {
-				data[std::move(keyStr)] = std::forward<T>(value);
-				changed = true;
+			}
+
+			if (changed) {
+				key_copy = it->first;
+				value_copy = it->second;  // snapshot, чтобы после unlock не лезть в data
 			}
 		}
 
 		if (changed) {
-			notifyObservers(key, data[std::string(key)]);
+			notifyObservers(key_copy, value_copy);
 		}
 		return changed;
 	}
 
-	// Получение с проверкой типа
 	template<typename T>
 	std::optional<T> get(std::string_view key) const
 	{
 		std::lock_guard lock(mutex);
-		std::string keyStr(key);
-		auto it = data.find(keyStr);
+		auto it = data.find(key);
 		if (it != data.end()) {
 			try {
 				return std::any_cast<T>(it->second);
@@ -96,8 +141,7 @@ public:
 	const std::optional<std::any> getAny(std::string_view key)
 	{
 		std::lock_guard lock(mutex);
-		std::string keyStr(key);
-		auto it = data.find(keyStr);
+		auto it = data.find(key);
 		if (it != data.end()) {
 			return it->second;
 		}
@@ -115,8 +159,7 @@ public:
 	bool isType(std::string_view key) const
 	{
 		std::lock_guard lock(mutex);
-		std::string keyStr(key);
-		auto it = data.find(keyStr);
+		auto it = data.find(key);
 		if (it != data.end()) {
 			return it->second.type() == typeid(T);
 		}
@@ -126,8 +169,7 @@ public:
 	bool has(std::string_view key) const
 	{
 		std::lock_guard lock(mutex);
-		std::string keyStr(key);
-		return data.find(keyStr) != data.end();
+		return data.find(key) != data.end();
 	}
 
 	bool remove(std::string_view key)
@@ -136,8 +178,7 @@ public:
 		std::any oldValue;
 		{
 			std::lock_guard lock(mutex);
-			std::string keyStr(key);
-			auto it = data.find(keyStr);
+			auto it = data.find(key);
 			if (it != data.end()) {
 				oldValue = std::move(it->second);
 				data.erase(it);
@@ -151,43 +192,38 @@ public:
 		return existed;
 	}
 
-	// Подписка на конкретный ключ
 	void subscribe(std::string_view key, AbstractEntryObserver *observer)
 	{
 		std::lock_guard lock(mutex);
-		keyObservers[std::string(key)].push_back(observer);
+		keyObservers[key].push_back(observer);
 	}
 
-	// Отписка от конкретного ключа
 	void unsubscribe(std::string_view key, AbstractEntryObserver *observer)
 	{
 		std::lock_guard lock(mutex);
-		auto it = keyObservers.find(std::string(key));
+		auto it = keyObservers.find(key);
 		if (it != keyObservers.end()) {
 			auto &observers = it->second;
 			observers.erase(std::remove(observers.begin(), observers.end(), observer), observers.end());
 		}
 	}
 
-	// Подписка на префикс
 	void subscribeToPrefix(std::string_view prefix, AbstractPrefixObserver *observer)
 	{
 		std::lock_guard lock(mutex);
-		prefixObservers[std::string(prefix)].push_back(observer);
+		prefixObservers[prefix].push_back(observer);
 	}
 
-	// Отписка от префикса
 	void unsubscribeFromPrefix(std::string_view prefix, AbstractPrefixObserver *observer)
 	{
 		std::lock_guard lock(mutex);
-		auto it = prefixObservers.find(std::string(prefix));
+		auto it = prefixObservers.find(prefix);
 		if (it != prefixObservers.end()) {
 			auto &observers = it->second;
 			observers.erase(std::remove(observers.begin(), observers.end(), observer), observers.end());
 		}
 	}
 
-	// Отписка наблюдателя от всех ключей и префиксов
 	void unsubscribeAll(AbstractEntryObserver *observer)
 	{
 		std::lock_guard lock(mutex);
@@ -204,14 +240,13 @@ public:
 		}
 	}
 
-	std::vector<std::string> getKeysByPrefix(std::string_view prefix) const
+	std::vector<std::string_view> getKeysByPrefix(std::string_view prefix) const
 	{
 		std::lock_guard lock(mutex);
-		std::vector<std::string> result;
-		std::string prefixStr(prefix);
+		std::vector<std::string_view> result;
 
 		for (const auto &key : data) {
-			if (key.first.find(prefixStr) != std::string::npos) {
+			if (key.first.find(prefix) != std::string::npos) {
 				result.push_back(key.first);
 			}
 		}
@@ -222,8 +257,7 @@ public:
 	std::string getTypeName(std::string_view key) const
 	{
 		std::lock_guard lock(mutex);
-		std::string keyStr(key);
-		auto it = data.find(keyStr);
+		auto it = data.find(key);
 		if (it != data.end()) {
 			return it->second.type().name();
 		}
@@ -243,21 +277,19 @@ private:
 	void notifyObservers(std::string_view key, const std::any &value)
 	{
 		std::vector<AbstractEntryObserver *> keyObserversCopy;
-		std::vector<std::pair<std::string, AbstractPrefixObserver *>> prefixObserversCopy;
-
+		std::vector<std::pair<std::string_view, AbstractPrefixObserver *>> prefixObserversCopy;
 		{
 			std::lock_guard lock(mutex);
-			std::string keyStr(key);
 
 			// Копируем наблюдатели для конкретного ключа
-			auto keyIt = keyObservers.find(keyStr);
+			auto keyIt = keyObservers.find(key);
 			if (keyIt != keyObservers.end()) {
 				keyObserversCopy = keyIt->second;
 			}
 
 			// Копируем наблюдатели для префиксов
 			for (const auto &[prefix, observers] : prefixObservers) {
-				if (keyStr.find(prefix) != std::string::npos) {
+				if (key.find(prefix) != std::string::npos) {
 					for (auto *observer : observers) {
 						prefixObserversCopy.emplace_back(prefix, observer);
 					}

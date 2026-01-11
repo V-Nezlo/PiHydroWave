@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BbNames.hpp"
 #include "logger/Logger.hpp"
 #include <any>
 #include <chrono>
@@ -14,6 +15,7 @@
 
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_set>
 
@@ -97,19 +99,19 @@ private:
 
 	void sendInitialTelemetry(const drogon::WebSocketConnectionPtr &conn)
 	{
-		const std::vector<std::string> telemKeys = bb->getKeysByPrefix(".telem");
+		const std::vector<std::string_view> telemKeys = bb->getKeysByPrefix(Names::kTelemPostfix);
 		for (const auto &key : telemKeys) {
 			nlohmann::json msg{{"type", "telemetry"}, {"key", key}, {"value", toJson(bb->getAny(key).value())}};
 			conn->send(msg.dump());
 		}
 
-		const std::vector<std::string> configKeys = bb->getKeysByPrefix(".config");
+		const std::vector<std::string_view> configKeys = bb->getKeysByPrefix(Names::kConfigPostfix);
 		for (const auto &key : configKeys) {
 			nlohmann::json msg{{"type", "telemetry"}, {"key", key}, {"value", toJson(bb->getAny(key).value())}};
 			conn->send(msg.dump());
 		}
 
-		const std::vector<std::string> intKeys = bb->getKeysByPrefix(".int");
+		const std::vector<std::string_view> intKeys = bb->getKeysByPrefix(Names::kIntPostfix);
 		for (const auto &key : intKeys) {
 			nlohmann::json msg{{"type", "telemetry"}, {"key", key}, {"value", toJson(bb->getAny(key).value())}};
 			conn->send(msg.dump());

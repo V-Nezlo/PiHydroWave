@@ -53,6 +53,7 @@ class Application {
 	DrogonApp drogonApp;
 
 	MonitorEntry monitor;
+	bool started;
 
 public:
 	Application(Args &&aArgs, RS::DeviceVersion aVersion) :
@@ -74,7 +75,8 @@ public:
 		rest{std::make_shared<BackRestController>()},
 		drogonApp{rest, sock},
 
-		monitor{bb}
+		monitor{bb},
+		started{true}
 	{
 		Log::WebSocketLogger::registerSocket(sock);
 		Log::DBLogger::registerDB(db);
@@ -91,6 +93,7 @@ public:
 		rest->registerInterfaces(bb, bus);
 		sock->registerInterfaces(bb, bus);
 		rest->initPathRouting();
+		drogonApp.setTerminator([this](){started = false;});
 	}
 
 	int run()
@@ -100,10 +103,12 @@ public:
 		monitor.invoke();
 		testPacket();
 
+		bb->printAllKeys();
+
 		std::this_thread::sleep_for(std::chrono::milliseconds{250});
 		radioHandler.probe();
 
-		while (true) {
+		while (started) {
 			if (!pumpControl.isStarted() && pumpControl.ready()) {
 				pumpControl.start();
 			}
@@ -116,6 +121,8 @@ public:
 
 			std::this_thread::sleep_for(std::chrono::seconds{5});
 		}
+
+		return 0;
 	}
 
 	void testPacket()
