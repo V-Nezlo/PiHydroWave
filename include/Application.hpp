@@ -98,7 +98,7 @@ public:
 		radioHandler.start();
 		drogonApp.start();
 		monitor.invoke();
-		// testPacket();
+		testPacket();
 
 		std::this_thread::sleep_for(std::chrono::milliseconds{250});
 		radioHandler.probe();

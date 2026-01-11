@@ -17,7 +17,7 @@ type StatusLevel = 0 | 1 | 2 | 3;
 type ValueKind = 'bool' | 'number';
 
 type SettingsSection = 'config' | 'int';
-type SettingsValueType = 'bool' | 'number' | 'list' | 'select';
+type SettingsValueType = 'bool' | 'number' | 'list' | 'select' | 'time';
 
 interface WidgetState {
   id: string;
@@ -249,8 +249,8 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       name: 'Лампа',
       entries: [
         { key: 'lamp.config.enabled', label: 'Активна', section: 'config', type: 'bool' },
-        { key: 'lamp.config.onTime', label: 'Время работы', section: 'config', type: 'number', unit: 'сек' },
-        { key: 'lamp.config.offTime', label: 'Пауза', section: 'config', type: 'number', unit: 'сек' }
+        { key: 'lamp.config.onTime', label: 'Включение', section: 'config', type: 'time' },
+        { key: 'lamp.config.offTime', label: 'Выключение', section: 'config', type: 'time' }
       ]
     },
     {
@@ -381,6 +381,12 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     const draft = this.entryDrafts()[entry.key];
     if (entry.type === 'bool') {
       return '';
+    }
+    if (entry.type === 'time') {
+      if (draft === null || draft === undefined || draft === '') {
+        return '';
+      }
+      return this.minutesToTimeString(Number(draft));
     }
     if (draft === null || draft === undefined) {
       return '';
@@ -635,6 +641,13 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     if (entry.type === 'bool') {
       return Boolean(value);
     }
+    if (entry.type === 'time') {
+      if (value === null || value === undefined || value === '') {
+        return '';
+      }
+      const numeric = Number(value);
+      return Number.isNaN(numeric) ? '' : numeric;
+    }
     if (value === null || value === undefined) {
       return '';
     }
@@ -650,6 +663,13 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       return Number.isNaN(numeric) ? 0 : numeric;
     }
     if (entry.type === 'select') {
+      const numeric = Number(value);
+      return Number.isNaN(numeric) ? 0 : numeric;
+    }
+    if (entry.type === 'time') {
+      if (typeof value === 'string') {
+        return this.timeStringToMinutes(value);
+      }
       const numeric = Number(value);
       return Number.isNaN(numeric) ? 0 : numeric;
     }
@@ -868,5 +888,30 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     return `${minutes.toString().padStart(2, '0')}:${seconds
       .toString()
       .padStart(2, '0')}`;
+  }
+
+  private minutesToTimeString(value: number): string {
+    if (!Number.isFinite(value)) {
+      return '';
+    }
+    const safe = Math.max(0, Math.floor(value));
+    const hours = Math.floor(safe / 60) % 24;
+    const minutes = safe % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+
+  private timeStringToMinutes(value: string): number {
+    const parts = value.split(':').map((part) => part.trim());
+    if (parts.length !== 2) {
+      return 0;
+    }
+    const hours = Number(parts[0]);
+    const minutes = Number(parts[1]);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+      return 0;
+    }
+    const clampedHours = Math.min(Math.max(0, Math.floor(hours)), 23);
+    const clampedMinutes = Math.min(Math.max(0, Math.floor(minutes)), 59);
+    return clampedHours * 60 + clampedMinutes;
   }
 }

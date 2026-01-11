@@ -100,6 +100,12 @@
                   [value]="entryDraftValue(entry)"
                   (input)="onEntryInput(entry, $event)"
                 />
+                <input
+                  *ngSwitchCase="'time'"
+                  type="time"
+                  [value]="entryDraftValue(entry)"
+                  (input)="onEntryInput(entry, $event)"
+                />
                 <select *ngSwitchCase="'select'" [value]="entryDraftValue(entry)" (change)="onEntryInput(entry, $event)">
                   <option value="" disabled [selected]="entryDraftValue(entry) === ''">—</option>
                   <option
@@ -117,12 +123,7 @@
                   (input)="onEntryInput(entry, $event)"
                 ></textarea>
               </ng-container>
-              <div class="setting-actions">
-                <button class="apply-btn" type="button" (click)="saveEntry(entry)">Сохранить</button>
-                <button class="ghost-btn" type="button" [disabled]="!entryDirtyState(entry)" (click)="resetEntry(entry)">
-                  Сбросить
-                </button>
-              </div>
+              <button class="apply-btn inline" type="button" (click)="saveEntry(entry)">Сохранить</button>
             </div>
           </div>
         </div>
@@ -166,6 +167,13 @@
                   [value]="entryDraftValue(entry)"
                   (input)="onEntryInput(entry, $event)"
                 />
+                <input
+                  *ngSwitchCase="'time'"
+                  type="time"
+                  [disabled]="entryDisabled(entry)"
+                  [value]="entryDraftValue(entry)"
+                  (input)="onEntryInput(entry, $event)"
+                />
                 <select
                   *ngSwitchCase="'select'"
                   [disabled]="entryDisabled(entry)"
@@ -189,19 +197,14 @@
                   (input)="onEntryInput(entry, $event)"
                 ></textarea>
               </ng-container>
-              <div class="setting-actions">
-                <button
-                  class="apply-btn"
-                  type="button"
-                  [disabled]="entryDisabled(entry)"
-                  (click)="saveEntry(entry)"
-                >
-                  Сохранить
-                </button>
-                <button class="ghost-btn" type="button" [disabled]="!entryDirtyState(entry)" (click)="resetEntry(entry)">
-                  Сбросить
-                </button>
-              </div>
+              <button
+                class="apply-btn inline"
+                type="button"
+                [disabled]="entryDisabled(entry)"
+                (click)="saveEntry(entry)"
+              >
+                Сохранить
+              </button>
             </div>
           </div>
         </div>

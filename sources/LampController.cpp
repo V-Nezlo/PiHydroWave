@@ -124,9 +124,9 @@ bool LampController::isTimeForLampActive()
 	tm local{};
 	local = *std::localtime(&tt);
 
-	const uint32_t minutes = static_cast<uint32_t>(local.tm_hour * 60 + local.tm_min);
-	const uint32_t onTimeMin = onTime();
-	const uint32_t offTimeMin = offTime();
+	const int minutes = static_cast<int>(local.tm_hour * 60 + local.tm_min);
+	const int onTimeMin = onTime();
+	const int offTimeMin = offTime();
 
 	if (onTimeMin <= offTimeMin) {
 		return minutes >= onTimeMin && minutes < offTimeMin;

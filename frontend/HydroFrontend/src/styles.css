@@ -128,6 +128,8 @@ button {
 
 .setting-control {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.6rem;
 }
 
@@ -146,11 +148,7 @@ button {
 
 .setting-control textarea {
   resize: vertical;
-}
-
-.setting-actions {
-  display: flex;
-  gap: 0.6rem;
+  min-height: 84px;
 }
 
 .apply-btn,
@@ -167,15 +165,9 @@ button {
 .apply-btn {
   background: #2cd2aa;
   color: #031116;
+  white-space: nowrap;
 }
 
-.ghost-btn {
-  background: transparent;
-  border: 1px solid rgba(72, 150, 137, 0.55);
-  color: #b9d3cc;
-}
-
-.ghost-btn:disabled,
 .apply-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
