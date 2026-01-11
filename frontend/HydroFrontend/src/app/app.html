@@ -46,9 +46,96 @@
         </div>
 
         <div class="water-stage">
-          <div class="water-track" [class.flooding]="isFlooding()">
-            <div class="water-flow"></div>
-            <div class="water-flow secondary"></div>
+          <div class="hydro-panel" [ngClass]="isFlooding() ? 'fillLoop' : 'drainLoop'">
+            <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hydroponic animation">
+              <defs>
+                <clipPath id="tankClip">
+                  <rect x="20" y="20" width="860" height="220" rx="28" ry="28"/>
+                </clipPath>
+                <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+                  <feGaussianBlur stdDeviation="0.6"/>
+                </filter>
+                <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="#2aa7ff" stop-opacity="0.95"/>
+                  <stop offset="1" stop-color="#0a5aa6" stop-opacity="0.95"/>
+                </linearGradient>
+                <radialGradient id="bgGrad" cx="30%" cy="20%" r="90%">
+                  <stop offset="0" stop-color="#0b1b24"/>
+                  <stop offset="1" stop-color="#061219"/>
+                </radialGradient>
+              </defs>
+
+              <rect class="frame" x="20" y="20" width="860" height="220" rx="28" ry="28"/>
+              <rect class="labelLine" x="40" y="54" width="220" height="10" rx="5" opacity="0.35"/>
+              <rect class="labelLine" x="40" y="78" width="140" height="10" rx="5" opacity="0.20"/>
+
+              <g clip-path="url(#tankClip)">
+                <rect x="20" y="20" width="860" height="220" fill="rgba(0,0,0,0.10)"/>
+
+                <g opacity="0.9">
+                  <rect class="drip" x="150" y="30" width="46" height="14" rx="7"/>
+                  <rect class="drip" x="430" y="30" width="46" height="14" rx="7"/>
+                  <rect class="drip" x="710" y="30" width="46" height="14" rx="7"/>
+                  <rect class="drip" x="166" y="44" width="14" height="20" rx="7"/>
+                  <rect class="drip" x="446" y="44" width="14" height="20" rx="7"/>
+                  <rect class="drip" x="726" y="44" width="14" height="20" rx="7"/>
+                </g>
+
+                <g>
+                  <path class="root" d="M175 70 C170 95, 165 115, 160 140 C154 170, 150 188, 152 210"/>
+                  <path class="rootThin" d="M185 72 C180 98, 175 112, 172 132 C168 158, 166 175, 168 206"/>
+                  <path class="rootThin" d="M164 78 C156 98, 150 118, 146 140 C140 168, 138 186, 140 210"/>
+                  <path class="rootHair" d="M171 76 C166 96, 160 120, 158 138 C154 160, 152 182, 154 206"/>
+                  <path class="rootHair" d="M180 80 C176 102, 170 122, 168 140 C165 162, 164 186, 166 210"/>
+                  <path class="rootHair" d="M158 84 C152 104, 148 120, 144 142 C140 164, 140 188, 142 210"/>
+                  <path class="rootHair" d="M190 84 C186 104, 182 122, 178 144 C174 166, 172 188, 174 210"/>
+
+                  <path class="root" d="M455 70 C450 96, 445 118, 440 142 C434 170, 430 190, 432 210"/>
+                  <path class="rootThin" d="M465 76 C460 100, 455 118, 452 136 C448 160, 446 178, 448 206"/>
+                  <path class="rootThin" d="M444 78 C436 98, 430 120, 426 142 C420 170, 418 190, 420 210"/>
+                  <path class="rootHair" d="M452 76 C446 100, 442 120, 438 144 C434 168, 434 190, 436 210"/>
+                  <path class="rootHair" d="M472 82 C468 104, 462 122, 460 144 C456 168, 454 190, 456 210"/>
+                  <path class="rootHair" d="M436 84 C430 104, 426 122, 422 144 C418 168, 418 190, 420 210"/>
+                  <path class="rootHair" d="M462 84 C458 106, 452 124, 450 146 C446 170, 446 192, 448 210"/>
+
+                  <path class="root" d="M735 70 C730 96, 724 118, 720 142 C714 170, 710 190, 712 210"/>
+                  <path class="rootThin" d="M745 76 C740 100, 735 118, 732 136 C728 160, 726 178, 728 206"/>
+                  <path class="rootThin" d="M724 78 C716 100, 710 120, 706 142 C700 170, 698 190, 700 210"/>
+                  <path class="rootHair" d="M732 76 C726 100, 722 120, 718 144 C714 168, 714 190, 716 210"/>
+                  <path class="rootHair" d="M752 82 C748 104, 742 122, 740 144 C736 168, 734 190, 736 210"/>
+                  <path class="rootHair" d="M716 84 C710 104, 706 122, 702 144 C698 168, 698 190, 700 210"/>
+                  <path class="rootHair" d="M742 84 C738 106, 732 124, 730 146 C726 170, 726 192, 728 210"/>
+                </g>
+
+                <g class="waterGroup">
+                  <rect class="waterBody" x="20" y="90" width="860" height="260" opacity="0.92"/>
+                  <g class="waveShift">
+                    <path
+                      class="wave"
+                      d="M20 110 C 70 95, 120 125, 170 110 C 220 95, 270 125, 320 110 C 370 95, 420 125, 470 110 C 520 95, 570 125, 620 110 C 670 95, 720 125, 770 110 C 820 95, 870 125, 920 110 L 920 140 L 20 140 Z"
+                      opacity="0.22"
+                    />
+                    <path
+                      class="wave"
+                      d="M920 110 C 970 95, 1020 125, 1070 110 C 1120 95, 1170 125, 1220 110 C 1270 95, 1320 125, 1370 110 L 1370 140 L 920 140 Z"
+                      opacity="0.22"
+                    />
+                  </g>
+                </g>
+              </g>
+
+              <rect
+                x="20"
+                y="20"
+                width="860"
+                height="220"
+                rx="28"
+                ry="28"
+                fill="none"
+                stroke="rgba(255,255,255,0.14)"
+                stroke-width="2"
+              />
+            </svg>
           </div>
           <p class="water-caption">
             {{ isFlooding() ? 'Затопление, поток вправо' : 'Осушение, воды нет' }}
