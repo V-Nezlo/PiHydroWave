@@ -52,6 +52,11 @@ interface SettingsDevice {
   entries: SettingsEntry[];
 }
 
+interface WriteEntryResult {
+  status: number;
+  isSuccess: boolean;
+}
+
 @Component({
   selector: 'app-root',
   imports: [CommonModule],
@@ -59,6 +64,7 @@ interface SettingsDevice {
   styleUrl: './app.css'
 })
 export class App implements OnInit, AfterViewInit, OnDestroy {
+  readonly macPlaceholder = 'AA:BB:CC:DD:EE:FF';
   readonly widgets = signal<WidgetState[]>([
     {
       id: 'pump',
@@ -185,6 +191,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
   readonly tickerItems = signal<string[]>(['Подключение к телеметрии...']);
   readonly tickerQueue = signal<string[]>([]);
+  readonly toastMessage = signal<string | null>(null);
   readonly selectedWidget = signal<WidgetState | null>(null);
   readonly viewMode = signal<'dashboard' | 'settings'>('dashboard');
   readonly selectedDeviceId = signal<string>('pump');
@@ -294,6 +301,9 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   private lastFrameTime = 0;
   private readonly tickerSpeed = 200;
   private readonly tickerQueueLimit = 200;
+  private readonly maxListEntryCount = 64;
+  private readonly maxMacEntryCount = 6;
+  private toastTimerId?: ReturnType<typeof setTimeout>;
 
   @ViewChild('tickerContainer')
   private tickerContainer?: ElementRef<HTMLDivElement>;
@@ -333,6 +343,9 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     }
     if (this.tickerFrameId !== undefined) {
       cancelAnimationFrame(this.tickerFrameId);
+    }
+    if (this.toastTimerId !== undefined) {
+      clearTimeout(this.toastTimerId);
     }
   }
 
@@ -382,6 +395,9 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     if (entry.type === 'bool') {
       return '';
     }
+    if (entry.type === 'list') {
+      return '';
+    }
     if (entry.type === 'time') {
       if (draft === null || draft === undefined || draft === '') {
         return '';
@@ -414,6 +430,79 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     this.entryDirty.update((dirty) => ({ ...dirty, [entry.key]: true }));
   }
 
+  entryListDraftValues(entry: SettingsEntry): string[] {
+    const draft = this.entryDrafts()[entry.key];
+    if (Array.isArray(draft)) {
+      const values = draft.map((item) => this.sanitizeListItem(entry, String(item ?? '')));
+      return values.length ? values : [''];
+    }
+    if (draft === null || draft === undefined) {
+      return [''];
+    }
+    const text = String(draft).trim();
+    if (!text) {
+      return [''];
+    }
+    const values = text
+      .split('\n')
+      .map((item) => this.sanitizeListItem(entry, item.trim()))
+      .filter(Boolean);
+    return values.length ? values : [''];
+  }
+
+  listItemKey(entry: SettingsEntry, index: number): string {
+    return `${entry.key}.${index + 1}`;
+  }
+
+  addListItem(entry: SettingsEntry): void {
+    const values = this.entryListDraftValues(entry);
+    if (values.length >= this.listEntryLimit(entry)) {
+      return;
+    }
+    this.entryDrafts.update((drafts) => ({ ...drafts, [entry.key]: [...values, ''] }));
+    this.entryDirty.update((dirty) => ({ ...dirty, [entry.key]: true }));
+  }
+
+  onListInput(entry: SettingsEntry, index: number, event: Event): void {
+    const target = event.target as HTMLInputElement;
+    const sanitized = this.sanitizeListItem(entry, target.value);
+    if (target.value !== sanitized) {
+      target.value = sanitized;
+    }
+    const next = [...this.entryListDraftValues(entry)];
+    next[index] = sanitized;
+    this.entryDrafts.update((drafts) => ({ ...drafts, [entry.key]: next }));
+    this.entryDirty.update((dirty) => ({ ...dirty, [entry.key]: true }));
+  }
+
+  onListKeyDown(entry: SettingsEntry, event: KeyboardEvent): void {
+    if (!this.isMacListEntry(entry)) {
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return;
+    }
+    const allowedKeys = new Set([
+      'Backspace',
+      'Delete',
+      'Tab',
+      'Enter',
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
+      'ArrowDown',
+      'Home',
+      'End'
+    ]);
+    if (allowedKeys.has(event.key)) {
+      return;
+    }
+    if (/^[0-9A-Fa-f:]$/.test(event.key)) {
+      return;
+    }
+    event.preventDefault();
+  }
+
   resetEntry(entry: SettingsEntry): void {
     const value = this.entryValues()[entry.key];
     this.entryDrafts.update((drafts) => ({
@@ -427,16 +516,23 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     if (this.entryDisabled(entry)) {
       return;
     }
+    if (entry.type === 'list') {
+      await this.saveListEntry(entry);
+      return;
+    }
     const draft = this.entryDrafts()[entry.key];
     const value = this.parseDraft(entry, draft);
-    const ok = await this.setEntryValue(entry.key, value);
-    if (ok) {
-      const fresh = await this.fetchEntryValue(entry.key);
-      if (fresh !== undefined) {
-        this.applyEntryValue(entry.key, fresh, true);
-      } else {
-        this.applyEntryValue(entry.key, value, true);
-      }
+    const result = await this.setEntryValue(entry.key, value);
+    if (!result.isSuccess) {
+      this.handleWriteFailure(entry, result.status);
+      await this.reloadEntryFromApi(entry);
+      return;
+    }
+    const fresh = await this.fetchEntryValue(entry.key);
+    if (fresh !== undefined) {
+      this.applyEntryValue(entry.key, fresh, true);
+    } else {
+      this.applyEntryValue(entry.key, value, true);
     }
   }
 
@@ -610,12 +706,19 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private loadSettings(): void {
-    const keys = Array.from(this.settingsEntryIndex.keys());
-    keys.forEach((key) => {
-      this.fetchEntryValue(key).then((value) => {
-        if (value !== undefined && value !== null) {
-          this.applyEntryValue(key, value, true);
+    this.settingsDevices.forEach((device) => {
+      device.entries.forEach((entry) => {
+        if (entry.type === 'list') {
+          this.fetchListEntryValues(entry).then((values) => {
+            this.applyEntryValue(entry.key, values, true);
+          });
+          return;
         }
+        this.fetchEntryValue(entry.key).then((value) => {
+          if (value !== undefined && value !== null) {
+            this.applyEntryValue(entry.key, value, true);
+          }
+        });
       });
     });
   }
@@ -633,10 +736,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
 
   private normalizeDraft(entry: SettingsEntry, value: unknown): unknown {
     if (entry.type === 'list') {
-      if (Array.isArray(value)) {
-        return value.join('\n');
-      }
-      return value ?? '';
+      return this.normalizeListDraft(entry, value);
     }
     if (entry.type === 'bool') {
       return Boolean(value);
@@ -674,14 +774,7 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
       return Number.isNaN(numeric) ? 0 : numeric;
     }
     if (entry.type === 'list') {
-      if (Array.isArray(value)) {
-        return value;
-      }
-      const text = String(value ?? '');
-      return text
-        .split('\n')
-        .map((item) => item.trim())
-        .filter(Boolean);
+      return this.normalizeListDraft(entry, value);
     }
     return value;
   }
@@ -732,18 +825,134 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  private async setEntryValue(key: string, value: unknown): Promise<boolean> {
+  private async setEntryValue(key: string, value: unknown): Promise<WriteEntryResult> {
     try {
       const payload: Record<string, unknown> = { [key]: value };
+      return await this.setEntriesValue(payload);
+    } catch {
+      return { status: 0, isSuccess: false };
+    }
+  }
+
+  private async setEntriesValue(payload: Record<string, unknown>): Promise<WriteEntryResult> {
+    try {
       const response = await fetch('/entry', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      return response.ok;
+      return { status: response.status, isSuccess: response.status === 204 };
     } catch {
-      return false;
+      return { status: 0, isSuccess: false };
     }
+  }
+
+  private async saveListEntry(entry: SettingsEntry): Promise<void> {
+    if (this.entryDisabled(entry)) {
+      return;
+    }
+    const draft = this.entryDrafts()[entry.key];
+    const list = this.parseDraft(entry, draft);
+    const values = Array.isArray(list) ? list.slice(0, this.listEntryLimit(entry)) : [];
+    const existing = await this.fetchListEntryValues(entry);
+    const total = Math.max(values.length, existing.length);
+    if (total === 0) {
+      this.applyEntryValue(entry.key, [], true);
+      return;
+    }
+    const payload: Record<string, unknown> = {};
+    for (let index = 0; index < total; index += 1) {
+      payload[this.listItemKey(entry, index)] = values[index] ?? '';
+    }
+    const result = await this.setEntriesValue(payload);
+    if (!result.isSuccess) {
+      this.handleWriteFailure(entry, result.status);
+      await this.reloadEntryFromApi(entry);
+      return;
+    }
+    const fresh = await this.fetchListEntryValues(entry);
+    this.applyEntryValue(entry.key, fresh, true);
+  }
+
+  private async reloadEntryFromApi(entry: SettingsEntry): Promise<void> {
+    if (entry.type === 'list') {
+      const freshList = await this.fetchListEntryValues(entry);
+      this.applyEntryValue(entry.key, freshList, true);
+      return;
+    }
+    const fresh = await this.fetchEntryValue(entry.key);
+    if (fresh !== undefined) {
+      this.applyEntryValue(entry.key, fresh, true);
+      return;
+    }
+    this.resetEntry(entry);
+  }
+
+  private handleWriteFailure(entry: SettingsEntry, status: number): void {
+    const statusLabel = status === 0 ? 'network' : String(status);
+    const message = `Ошибка сохранения ${entry.key}: HTTP ${statusLabel}`;
+    this.handleTickerMessage(message);
+    this.showToast(message);
+  }
+
+  private showToast(message: string): void {
+    this.toastMessage.set(message);
+    if (this.toastTimerId !== undefined) {
+      clearTimeout(this.toastTimerId);
+    }
+    this.toastTimerId = setTimeout(() => {
+      this.toastMessage.set(null);
+      this.toastTimerId = undefined;
+    }, 3200);
+  }
+
+  private async fetchListEntryValues(entry: SettingsEntry): Promise<string[]> {
+    const values: string[] = [];
+    for (let index = 1; index <= this.listEntryLimit(entry); index += 1) {
+      const value = await this.fetchEntryValue(`${entry.key}.${index}`);
+      if (value === undefined || value === null) {
+        break;
+      }
+      const normalized = this.sanitizeListItem(entry, String(value).trim());
+      if (!normalized) {
+        continue;
+      }
+      values.push(normalized);
+    }
+    return values;
+  }
+
+  private isMacListEntry(entry: SettingsEntry): boolean {
+    return entry.key === 'bridge.config.mac';
+  }
+
+  private sanitizeListItem(entry: SettingsEntry, value: string): string {
+    if (!this.isMacListEntry(entry)) {
+      return value.trim();
+    }
+    return value.toUpperCase().replace(/[^0-9A-F:]/g, '');
+  }
+
+  private normalizeListDraft(entry: SettingsEntry, value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => this.sanitizeListItem(entry, String(item ?? '').trim()))
+        .filter(Boolean)
+        .slice(0, this.listEntryLimit(entry));
+    }
+    const text = String(value ?? '').trim();
+    if (!text) {
+      return [];
+    }
+    return text
+      .split('\n')
+      .map((item) => this.sanitizeListItem(entry, item.trim()))
+      .filter(Boolean)
+      .slice(0, this.listEntryLimit(entry));
+  }
+
+  private listEntryLimit(entry: SettingsEntry): number {
+    return this.isMacListEntry(entry) ? this.maxMacEntryCount : this.maxListEntryCount;
   }
 
   private handleTickerMessage(message: string): void {

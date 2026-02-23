@@ -71,7 +71,6 @@ public:
 
 				} else {
 					result[key] = bb->getTypeName(key);
-					// result[key] = static_cast<int>(1);
 				}
 
 			}
@@ -110,32 +109,32 @@ public:
 			return;
 		}
 
+		bool result = false;
 		for (const auto &name : input.getMemberNames()) {
 			const Json::Value &val = input[name];
 
 			if (bb->has(name)) {
-
 				// Будем писать в BB по тому типу что даст BB
 				if (bb->isType<bool>(name)) {
-					bb->set<bool>(name, val.asBool());
+					result = bb->set<bool>(name, val.asBool());
 
 				} else if (bb->isType<unsigned>(name)) {
-					bb->set<unsigned>(name, val.asUInt());
+					result = bb->set<unsigned>(name, val.asUInt());
 
 				} else if (bb->isType<int>(name)) {
-					bb->set<int>(name, val.asInt());
+					result = bb->set<int>(name, val.asInt());
 
 				} else if (bb->isType<float>(name)) {
-					bb->set<float>(name, val.asFloat());
+					result = bb->set<float>(name, val.asFloat());
 
 				} else if (bb->isType<std::string>(name)) {
-					bb->set<std::string>(name, val.asString());
+					result = bb->set<std::string>(name, val.asString());
 
 				} else if (bb->isType<std::chrono::seconds>(name)) {
-					bb->set<std::chrono::seconds>(name, std::chrono::seconds{val.asUInt()});
+					result = bb->set<std::chrono::seconds>(name, std::chrono::seconds{val.asUInt()});
 
 				} else if (bb->isType<std::chrono::milliseconds>(name)) {
-					bb->set<std::chrono::milliseconds>(name, std::chrono::milliseconds{val.asUInt()});
+					result = bb->set<std::chrono::milliseconds>(name, std::chrono::milliseconds{val.asUInt()});
 
 				} else {
 					HYDRO_LOG_ERROR("Rest: setValue : unsupported type");
@@ -144,7 +143,12 @@ public:
 		}
 
 		auto resp = HttpResponse::newHttpResponse();
-		resp->setStatusCode(k204NoContent);
+		if (!result) {
+			resp->setStatusCode(k400BadRequest);
+		} else {
+			resp->setStatusCode(k204NoContent);
+		}
+
 		callback(resp);
 	}
 

@@ -3,7 +3,9 @@
 #include "BbNames.hpp"
 #include "SettingsManager.hpp"
 #include "core/Blackboard.hpp"
+#include "core/FieldValidators.hpp"
 #include "core/Helpers.hpp"
+#include "core/InterfaceList.hpp"
 #include <memory>
 #include <string>
 
@@ -15,6 +17,7 @@ struct ConfigPackage {
 		manager{aBb, aFileName}
 	{
 		registerSettings();
+		generateValidators();
 	}
 
 	void registerSettings()
@@ -36,6 +39,17 @@ struct ConfigPackage {
 
 		manager.registerSetting(Names::kSystemMaintance, SettingType::BOOL, false, "System maintance mode");
 		manager.registerSetting(Names::kBridgeMacs + ".1", SettingType::STRING, "E8:31:CD:D6:D1:B4", "MAC1");
+		manager.registerSetting(Names::kBridgeMacs + ".2", SettingType::STRING, "", "MAC2");
+		manager.registerSetting(Names::kBridgeMacs + ".3", SettingType::STRING, "", "MAC3");
+		manager.registerSetting(Names::kBridgeMacs + ".4", SettingType::STRING, "", "MAC4");
+		manager.registerSetting(Names::kBridgeMacs + ".5", SettingType::STRING, "", "MAC5");
+		manager.registerSetting(Names::kBridgeMacs + ".6", SettingType::STRING, "", "MAC6");
+	}
+
+	void generateValidators()
+	{
+		std::unique_ptr<AbstractValidator> macVal = std::make_unique<MacFieldValidator>();
+		bb->insertValidator(Names::kBridgeMacs, std::move(macVal));
 	}
 
 	bool load()

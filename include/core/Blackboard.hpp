@@ -1,15 +1,19 @@
 #pragma once
 
+#include "core/InterfaceList.hpp"
+#include "core/Types.hpp"
 #include "logger/Logger.hpp"
 #include <any>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 struct StrHash {
@@ -66,6 +70,8 @@ public:
 class Blackboard {
 private:
 	std::unordered_map<std::string, std::any, StrHash, StrEq> data;
+	std::unordered_map<std::string, std::unique_ptr<AbstractValidator>, StrHash, StrEq> validators;
+
 	mutable std::recursive_mutex mutex;
 
 	std::unordered_map<std::string_view, std::vector<AbstractEntryObserver *>> keyObservers;
@@ -79,45 +85,59 @@ public:
 
 		bool changed = false;
 
-		std::string_view key_copy;
-		std::any value_copy;
+		std::any anyVal = std::any(std::forward<T>(value));
+		std::any anyValSnap;
+		std::string_view keySnap;
+
 		{
 			std::lock_guard lock(mutex);
 			auto it = data.find(key);
 
 			// Если ключа нет - аллоцируем строку, кладем внутрь
 			if (it == data.end()) {
-				auto result = data.try_emplace(std::string(key), std::any(std::forward<T>(value)));
+				auto result = data.try_emplace(std::string(key), anyVal);
 				it = result.first;
 				changed = true;
 			// Если ключ есть - проверим, есть ли смысл вызывать обсерверы
 			} else {
+				// Но сначала посмотрим список валидаторов
+				for (const auto &[entry, validator] : validators) {
+					if (key.find(entry) != std::string::npos) {
+						if (validator) {
+							// Проверяем валидатором запись, если не соответствует - дропаем
+							if (!validator->isDataCorrect(anyVal)) {
+								return false;
+							}
+						}
+					}
+				}
 
 				if (auto* old = std::any_cast<V>(&it->second)) {
 					// Если оператор сравнения есть - сравниваем
 					if constexpr (requires (const V& a, const V& b) { a == b; }) {
 						if (*old != value) {
-							it->second = std::any(std::forward<T>(value));
+							it->second = anyVal;
 							changed = true;
 						}
 					// Если нет - считаем измененным
 					} else {
-						it->second = std::any(std::forward<T>(value));
+						it->second = anyVal;
 						changed = true;
 					}
 				} else {
 					HYDRO_LOG_ERROR("Key" + std::string(key) + "trying to change his type, daga kotowaru!");
+					return false;
 				}
 			}
 
 			if (changed) {
-				key_copy = it->first;
-				value_copy = it->second;  // snapshot, чтобы после unlock не лезть в data
+				keySnap = it->first;
+				anyValSnap = it->second;
 			}
 		}
 
 		if (changed) {
-			notifyObservers(key_copy, value_copy);
+			notifyObservers(keySnap, anyValSnap);
 		}
 		return changed;
 	}
@@ -136,6 +156,28 @@ public:
 		}
 		std::cerr << "Key " << key << " not found!" << std::endl;
 		return std::nullopt;
+	}
+
+	/// \brief insertValidator
+	/// \param aEntry Может быть и префиксом и именем
+	/// \param aValidator ожидается rvalue на валидатор
+	/// \return
+	bool insertValidator(std::string_view aEntry, std::unique_ptr<AbstractValidator> aValidator)
+	{
+		// if (!has(aEntry)) {
+		// 	HYDRO_LOG_ERROR("Validator was not inserted");
+		// 	return false;
+		// }
+
+		if (validators.contains(aEntry)) {
+			HYDRO_LOG_ERROR("Validator already registered");
+			return false;
+		}
+
+		std::string ent = std::string{aEntry};
+
+		const auto result = validators.try_emplace(ent, std::move(aValidator));
+		return result.second;
 	}
 
 	const std::optional<std::any> getAny(std::string_view key)

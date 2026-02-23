@@ -203,12 +203,21 @@
                     {{ option.label }}
                   </option>
                 </select>
-                <textarea
-                  *ngSwitchCase="'list'"
-                  rows="4"
-                  [value]="entryDraftValue(entry)"
-                  (input)="onEntryInput(entry, $event)"
-                ></textarea>
+                <div class="list-control" *ngSwitchCase="'list'">
+                  <div class="list-item" *ngFor="let value of entryListDraftValues(entry); let i = index">
+                    <input
+                      type="text"
+                      [value]="value"
+                      [attr.maxlength]="entry.key === 'bridge.config.mac' ? 17 : null"
+                      [attr.placeholder]="macPlaceholder"
+                      [attr.pattern]="entry.key === 'bridge.config.mac' ? '[0-9A-Fa-f:]*' : null"
+                      (keydown)="onListKeyDown(entry, $event)"
+                      (input)="onListInput(entry, i, $event)"
+                    />
+                    <span class="setting-key">{{ listItemKey(entry, i) }}</span>
+                  </div>
+                  <button class="add-btn" type="button" (click)="addListItem(entry)">Добавить</button>
+                </div>
               </ng-container>
               <button class="apply-btn inline" type="button" (click)="saveEntry(entry)">Сохранить</button>
             </div>
@@ -276,13 +285,24 @@
                     {{ option.label }}
                   </option>
                 </select>
-                <textarea
-                  *ngSwitchCase="'list'"
-                  rows="4"
-                  [disabled]="entryDisabled(entry)"
-                  [value]="entryDraftValue(entry)"
-                  (input)="onEntryInput(entry, $event)"
-                ></textarea>
+                <div class="list-control" *ngSwitchCase="'list'">
+                  <div class="list-item" *ngFor="let value of entryListDraftValues(entry); let i = index">
+                    <input
+                      type="text"
+                      [value]="value"
+                      [disabled]="entryDisabled(entry)"
+                      [attr.maxlength]="entry.key === 'bridge.config.mac' ? 17 : null"
+                      [attr.placeholder]="macPlaceholder"
+                      [attr.pattern]="entry.key === 'bridge.config.mac' ? '[0-9A-Fa-f:]*' : null"
+                      (keydown)="onListKeyDown(entry, $event)"
+                      (input)="onListInput(entry, i, $event)"
+                    />
+                    <span class="setting-key">{{ listItemKey(entry, i) }}</span>
+                  </div>
+                  <button class="add-btn" type="button" [disabled]="entryDisabled(entry)" (click)="addListItem(entry)">
+                    Добавить
+                  </button>
+                </div>
               </ng-container>
               <button
                 class="apply-btn inline"
@@ -339,4 +359,8 @@
       </p>
     </div>
   </div>
+</div>
+
+<div class="toast-error" *ngIf="toastMessage() as message">
+  {{ message }}
 </div>
