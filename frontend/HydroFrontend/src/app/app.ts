@@ -37,6 +37,11 @@ interface SystemState {
   swingState: string;
 }
 
+interface LitreMeterState {
+  tankValue: unknown;
+  tubeValue: unknown;
+}
+
 interface SettingsEntry {
   key: string;
   label: string;
@@ -187,6 +192,11 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     nextSwitchTime: '00:12',
     plainType: 'Затопление',
     swingState: ''
+  });
+
+  readonly litreMeter = signal<LitreMeterState>({
+    tankValue: null,
+    tubeValue: null
   });
 
   readonly tickerItems = signal<string[]>(['Подключение к телеметрии...']);
@@ -586,6 +596,18 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
     return widget.id;
   }
 
+  formatLitreValue(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+      return '--';
+    }
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      const formatted = numeric.toFixed(3).replace(/\.?0+$/, '');
+      return `${formatted} л`;
+    }
+    return String(value);
+  }
+
   private connectTelemetry(): void {
     if (!this.isBrowser) {
       return;
@@ -676,6 +698,16 @@ export class App implements OnInit, AfterViewInit, OnDestroy {
         swingState: this.formatSwingState(value)
       }));
       this.applyEntryValue(key, value, false);
+      return;
+    }
+
+    if (key === 'litreMeter.int.tankValue') {
+      this.litreMeter.update((current) => ({ ...current, tankValue: value }));
+      return;
+    }
+
+    if (key === 'litreMeter.int.tubeValue') {
+      this.litreMeter.update((current) => ({ ...current, tubeValue: value }));
       return;
     }
 

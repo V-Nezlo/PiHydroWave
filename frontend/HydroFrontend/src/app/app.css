@@ -172,6 +172,18 @@ h1 {
   overflow: hidden;
 }
 
+.panel-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1.2rem;
+}
+
+.panel-info {
+  display: grid;
+  gap: 1.3rem;
+}
+
 
 .panel-card::before {
   content: "";
@@ -213,7 +225,7 @@ h1 {
 }
 
 .water-stage {
-  margin-top: 0.5rem;
+  margin-top: 0.2rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -222,74 +234,88 @@ h1 {
 .hydro-panel {
   width: 100%;
   height: 160px;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.hydro-panel svg {
+.tank-outline {
+  position: relative;
+  width: 146px;
+  height: 176px;
+  border: 3px solid rgba(162, 213, 233, 0.86);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 32, 42, 0.36);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.tank-stack {
+  position: relative;
+  width: 258px;
+  min-height: 194px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.pipe-outline {
+  position: relative;
   width: 100%;
   height: 100%;
-  display: block;
+  border: 2px solid rgba(120, 171, 190, 0.62);
+  border-radius: 0.9rem;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 20, 26, 0.45);
 }
 
-.frame {
-  fill: url(#bgGrad);
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 2;
+.value-label {
+  position: relative;
+  z-index: 1;
+  font-family: "IBM Plex Mono", "Courier New", monospace;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #e8f5ff;
+  text-shadow: 0 0 10px rgba(62, 183, 255, 0.45);
 }
 
-.labelLine {
-  fill: rgba(255, 255, 255, 0.1);
+.flow-arrows {
+  position: absolute;
+  left: 58px;
+  top: 36px;
+  display: grid;
+  gap: 0.7rem;
 }
 
-.drip {
-  fill: rgba(255, 255, 255, 0.22);
+.arrow {
+  width: 34px;
+  height: 50px;
+  background: rgba(187, 219, 231, 0.25);
+  clip-path: polygon(50% 0, 100% 38%, 72% 38%, 72% 100%, 28% 100%, 28% 38%, 0 38%);
+  transition: opacity 0.2s ease, filter 0.2s ease, background 0.2s ease;
+  opacity: 0.35;
+  --arrow-rotation: 0deg;
+  transform: rotate(var(--arrow-rotation));
 }
 
-.waterBody {
-  fill: url(#waterGrad);
-  filter: url(#soft);
+.arrow-up {
+  --arrow-rotation: 0deg;
 }
 
-.wave {
-  fill: rgba(255, 255, 255, 0.1);
+.arrow-down {
+  --arrow-rotation: 180deg;
 }
 
-.fillLoop .waterGroup {
-  transform-origin: 0 0;
-  animation: levelFillDrop 4.8s linear infinite;
-}
-
-.fillLoop .waveShift {
-  animation: waveMove 1.4s linear infinite;
-}
-
-.drainLoop .waterGroup {
-  transform-origin: 0 0;
-  animation: levelDrain 4s linear infinite;
-}
-
-.drainLoop .waveShift {
-  animation: waveMove 1.4s linear infinite;
-}
-
-.root {
-  fill: none;
-  stroke: rgba(176, 124, 69, 0.95);
-  stroke-width: 7;
-  stroke-linecap: round;
-}
-
-.rootThin {
-  fill: none;
-  stroke: rgba(176, 124, 69, 0.78);
-  stroke-width: 3.8;
-  stroke-linecap: round;
-}
-
-.rootHair {
-  fill: none;
-  stroke: rgba(176, 124, 69, 0.55);
-  stroke-width: 2.2;
-  stroke-linecap: round;
+.arrow.active {
+  opacity: 1;
+  background: linear-gradient(180deg, #7ce8ff, #32bfff);
+  filter: drop-shadow(0 0 8px rgba(75, 212, 255, 0.65));
+  animation: arrowPulse 1.2s ease-in-out infinite;
 }
 
 .water-caption {
@@ -479,58 +505,15 @@ h1 {
   line-height: 1.5;
 }
 
-.toast-error {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 80;
-  max-width: min(460px, calc(100vw - 2rem));
-  padding: 0.75rem 0.95rem;
-  border-radius: 0.7rem;
-  border: 1px solid rgba(240, 88, 85, 0.65);
-  background: rgba(45, 13, 13, 0.96);
-  color: #ffd8d7;
-  font-size: 0.9rem;
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
-  animation: toast-in 0.16s ease-out;
-}
-
-@keyframes waveMove {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-180px);
-  }
-}
-
-@keyframes levelFillDrop {
+@keyframes arrowPulse {
   0% {
-    transform: translateY(150px);
+    transform: scale(1) rotate(var(--arrow-rotation));
   }
-  62% {
-    transform: translateY(5px);
-  }
-  72% {
-    transform: translateY(5px);
-  }
-  73% {
-    transform: translateY(150px);
+  50% {
+    transform: scale(1.09) rotate(var(--arrow-rotation));
   }
   100% {
-    transform: translateY(150px);
-  }
-}
-
-@keyframes levelDrain {
-  0% {
-    transform: translateY(5px);
-  }
-  85% {
-    transform: translateY(150px);
-  }
-  100% {
-    transform: translateY(150px);
+    transform: scale(1) rotate(var(--arrow-rotation));
   }
 }
 
@@ -574,6 +557,27 @@ h1 {
   .topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .panel-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .tank-stack {
+    width: 100%;
+    min-height: 172px;
+    justify-content: flex-end;
+  }
+
+  .flow-arrows {
+    left: auto;
+    right: 164px;
+    top: 30px;
+  }
+
+  .tank-outline {
+    width: 128px;
+    height: 154px;
   }
 }
 
