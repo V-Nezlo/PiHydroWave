@@ -1,5 +1,6 @@
 #include "RadioHandler.hpp"
 #include "BbNames.hpp"
+#include "core/RadioTypes.hpp"
 #include "logger/Logger.hpp"
 
 using namespace HydroRS;
@@ -93,7 +94,7 @@ RS::Result RadioHandler::blobAnswerEvReceived(const std::string &aName, uint8_t 
 		return RS::Result::Unsupported;
 	}
 
-	if (aRequest == static_cast<uint8_t>(Requests::RequestTelemetry)) {
+	if (aRequest == static_cast<uint8_t>(Requests::RequestTelemetry) && aSize == sizeof(MultiControllerTelem)) {
 		MultiControllerTelem telem;
 		memcpy(&telem, aData, aSize);
 

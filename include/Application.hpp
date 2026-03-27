@@ -5,6 +5,7 @@
 #include "BackWebSocket.hpp"
 #include "BbNames.hpp"
 #include "DrogonApp.hpp"
+#include "HttpFilter.hpp"
 #include "LampController.hpp"
 #include "MicroDeviceHub.hpp"
 #include "PumpController.hpp"
@@ -50,6 +51,8 @@ class Application {
 
 	std::shared_ptr<BackWebSocket> sock;
 	std::shared_ptr<BackRestController> rest;
+	std::shared_ptr<HardeningFilter> filter;
+
 	DrogonApp drogonApp;
 
 	MonitorEntry monitor;
@@ -73,7 +76,8 @@ public:
 
 		sock{std::make_shared<BackWebSocket>()},
 		rest{std::make_shared<BackRestController>()},
-		drogonApp{rest, sock},
+		filter{std::make_shared<HardeningFilter>()},
+		drogonApp{rest, sock, filter},
 
 		monitor{bb},
 		started{true}
@@ -128,7 +132,7 @@ public:
 		telem.pumpState = true;
 		telem.lampState = false;
 		telem.upperState = false;
-		telem.fiderState = false;
+		telem.flowDetector = false;
 		telem.temperature = 13.f;
 		telem.ph = 7.5f;
 		telem.ppm = 700;

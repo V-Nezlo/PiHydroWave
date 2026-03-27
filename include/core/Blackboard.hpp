@@ -52,6 +52,11 @@ private:
 	std::unordered_map<std::string_view, std::vector<AbstractPrefixObserver *>> prefixObservers;
 
 public:
+
+	/// \brief Установка значения
+	/// \param key Ключ
+	/// \param value rvalue значения
+	/// \return true если поле применено, false если запись не удалась
 	template<typename T>
 	bool set(std::string_view key, T&& value)
 	{
@@ -116,6 +121,9 @@ public:
 		return changed;
 	}
 
+	/// \brief Получить значение по ключу
+	/// \param key Ключ
+	/// \return Optional со значением
 	template<typename T>
 	std::optional<T> get(std::string_view key) const
 	{
@@ -149,6 +157,9 @@ public:
 		return result.second;
 	}
 
+	/// \brief Получить std::any по ключу
+	/// \param key Ключ
+	/// \return Optional с std::any
 	const std::optional<std::any> getAny(std::string_view key)
 	{
 		std::lock_guard lock(mutex);
@@ -160,12 +171,19 @@ public:
 		return std::nullopt;
 	}
 
+	/// \brief Получить или дефолтное значение
+	/// \param key Ключ
+	/// \param defaultValue Значение для возврата при неудачном чтении
+	/// \return если чтение успешно - текущее значение, если нет - переданное значение
 	template<typename T>
 	T getOr(std::string_view key, T defaultValue) const
 	{
 		return get<T>(key).value_or(defaultValue);
 	}
 
+	/// \brief Проверка типа хранимого значения
+	/// \param key Ключ
+	/// \return true если тип сходится
 	template<typename T>
 	bool isType(std::string_view key) const
 	{
@@ -177,12 +195,18 @@ public:
 		return false;
 	}
 
+	/// \brief Проверка наличия записи
+	/// \param key Ключ
+	/// \return true если запись имеется
 	bool has(std::string_view key) const
 	{
 		std::lock_guard lock(mutex);
 		return data.find(key) != data.end();
 	}
 
+	/// \brief Удалить запись
+	/// \param key Ключ
+	/// \return true если удаление успешно
 	bool remove(std::string_view key)
 	{
 		bool existed = false;
@@ -203,12 +227,18 @@ public:
 		return existed;
 	}
 
+	/// \brief Подписаться на обновление записи
+	/// \param key Ключ
+	/// \param observer Наблюдатель на обновление записи
 	void subscribe(std::string_view key, AbstractEntryObserver *observer)
 	{
 		std::lock_guard lock(mutex);
 		keyObservers[key].push_back(observer);
 	}
 
+	/// \brief Отписаться от обновления
+	/// \param key Ключ
+	/// \param observer Наблюдатель
 	void unsubscribe(std::string_view key, AbstractEntryObserver *observer)
 	{
 		std::lock_guard lock(mutex);
@@ -219,12 +249,18 @@ public:
 		}
 	}
 
+	/// \brief Подписаться на обновление префикса
+	/// \param prefix Префикс (например telem.)
+	/// \param observer Наблюдатель
 	void subscribeToPrefix(std::string_view prefix, AbstractPrefixObserver *observer)
 	{
 		std::lock_guard lock(mutex);
 		prefixObservers[prefix].push_back(observer);
 	}
 
+	/// \brief Отписаться от обновление префикса
+	/// \param prefix Префикс (например telem.)
+	/// \param observer Наблюдатель
 	void unsubscribeFromPrefix(std::string_view prefix, AbstractPrefixObserver *observer)
 	{
 		std::lock_guard lock(mutex);
@@ -235,6 +271,8 @@ public:
 		}
 	}
 
+	/// \brief Убрать наблюдателя на запись из всех записей
+	/// \param observer Наблюдатель
 	void unsubscribeAll(AbstractEntryObserver *observer)
 	{
 		std::lock_guard lock(mutex);
@@ -243,6 +281,8 @@ public:
 		}
 	}
 
+	/// \brief Убрать наблюдателя на префикс из всех записей
+	/// \param observer Наблюдатель
 	void unsubscribeAll(AbstractPrefixObserver *observer)
 	{
 		std::lock_guard lock(mutex);
@@ -251,6 +291,9 @@ public:
 		}
 	}
 
+	/// \brief Получить вектор ключей по префиксу
+	/// \param prefix Префикс
+	/// \return вектор с ключами
 	std::vector<std::string_view> getKeysByPrefix(std::string_view prefix) const
 	{
 		std::lock_guard lock(mutex);
@@ -265,6 +308,9 @@ public:
 		return result;
 	}
 
+	/// \brief Получить имя типа записи
+	/// \param key Ключ
+	/// \return имя типа
 	std::string getTypeName(std::string_view key) const
 	{
 		std::lock_guard lock(mutex);
@@ -275,6 +321,7 @@ public:
 		return "not_found";
 	}
 
+	/// \brief Распечатать все имеющиеся ключи
 	void printAllKeys()
 	{
 		std::cout << "All BB keys:" << std::endl;
@@ -285,6 +332,10 @@ public:
 	}
 
 private:
+
+	/// \brief Оповестить все обсерверы
+	/// \param key Ключ
+	/// \param value any со значением
 	void notifyObservers(std::string_view key, const std::any &value)
 	{
 		std::vector<AbstractEntryObserver *> keyObserversCopy;
